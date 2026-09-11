@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0F2740">
+  <title>Suivi Nacelle — Connexion</title>
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body class="login-page">
+
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="brand">🏗️ Suivi Nacelle</div>
+      <div class="tagline">Tournées fibre — suivi en temps réel</div>
+    </div>
+
+    <div id="erreur" class="msg msg-erreur hidden"></div>
+
+    <form id="form-connexion" autocomplete="on">
+      <div class="form-group">
+        <label for="identifiant">Identifiant</label>
+        <input type="text" id="identifiant" name="username"
+               placeholder="ex. hamda"
+               autocomplete="username" autocapitalize="none"
+               autocorrect="off" spellcheck="false" required autofocus>
+      </div>
+
+      <div class="form-group">
+        <label for="motdepasse">Mot de passe</label>
+        <input type="password" id="motdepasse" name="password"
+               placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-bloc" id="btn-connexion">
+        Se connecter
+      </button>
+    </form>
+
+    <p class="login-note">
+      Identifiant et mot de passe fournis par<br>votre administrateur.
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js?v=1"></script>
+  <script src="js/auth.js?v=1"></script>
+</body>
+</html>
