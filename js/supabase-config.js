@@ -13,8 +13,8 @@
 // uniquement dans les secrets Supabase, cote Edge Functions.
 // ============================================================
 
-const SUPABASE_URL      = 'A_REMPLIR';   // ex. https://xxxxxxxx.supabase.co
-const SUPABASE_ANON_KEY = 'A_REMPLIR';
+const SUPABASE_URL      = 'https://kyqcrrppuijuhqnwakhl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5cWNycnBwdWlqdWhxbndha2hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxMjUzOTIsImV4cCI6MjEwNDcwMTM5Mn0.9ZBGYiamSqlWXpSeXynUWEq5wCNZHOaP79BpLgoST6A';
 
 // Les nacellistes se connectent avec un identifiant simple
 // (« hamda »), pas avec une adresse e-mail : Supabase Auth exige un
