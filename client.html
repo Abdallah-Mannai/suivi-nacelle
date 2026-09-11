@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0F2740">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Suivi de votre intervention fibre</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body class="page-client">
+
+  <header class="entete">
+    <div class="entete-titre">🏗️ Votre intervention fibre</div>
+  </header>
+
+  <main class="conteneur">
+
+    <!-- Chargement -->
+    <div id="cli-chargement" class="carte-bloc centre">
+      <p>Chargement du suivi…</p>
+    </div>
+
+    <!-- Lien invalide / expire -->
+    <div id="cli-invalide" class="carte-bloc centre hidden">
+      <div class="gros-emoji">🔗</div>
+      <div class="titre-bloc">Lien invalide ou expiré</div>
+      <p class="note">Ce lien de suivi n’est plus actif.<br>
+      Rapprochez-vous du technicien qui vous l’a fourni.</p>
+    </div>
+
+    <!-- Intervention terminee -->
+    <div id="cli-termine" class="carte-bloc centre hidden">
+      <div class="gros-emoji">✅</div>
+      <div class="titre-bloc">Intervention terminée</div>
+      <p id="cli-infos-apres" class="note"></p>
+      <div class="bloc-telephone">
+        Un souci ? Appelez-moi :
+        <a id="cli-tel-termine" class="btn btn-primary btn-bloc" href="tel:">📞</a>
+      </div>
+    </div>
+
+    <!-- Suivi live -->
+    <div id="cli-suivi" class="hidden">
+      <div class="carte-bloc">
+        <div id="cli-statut-ligne" class="cli-statut">
+          <span class="point-vert"></span>
+          <span id="cli-statut-texte">En route…</span>
+        </div>
+        <div class="cli-eta">
+          <span class="cli-eta-libelle">Arrivée estimée</span>
+          <span id="cli-eta" class="cli-eta-heure">—</span>
+        </div>
+        <div id="cli-progression" class="note"></div>
+      </div>
+
+      <div id="cli-retard" class="carte-bloc bloc-retard hidden">
+        ⏰ Le nacelliste a du retard, désolé.<br>
+        En cas de problème, appelez le
+        <a id="cli-tel-retard" href="tel:"></a>.
+      </div>
+
+      <div id="carte-client" class="carte-leaflet carte-haute"></div>
+
+      <div class="carte-bloc">
+        <div class="titre-bloc">ℹ️ Avant l’intervention</div>
+        <p id="cli-infos-avant" class="note"></p>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="js/supabase-config.js?v=1"></script>
+  <script src="js/client.js?v=1"></script>
+</body>
+</html>
