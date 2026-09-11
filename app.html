@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0F2740">
+  <title>Suivi Nacelle</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+
+  <header class="entete">
+    <div class="entete-titre">🏗️ Suivi Nacelle</div>
+    <div class="entete-droite">
+      <span id="entete-nom"></span>
+      <button id="btn-deconnexion" class="btn btn-lien">Déconnexion</button>
+    </div>
+  </header>
+
+  <main id="chargement" class="conteneur">
+    <p class="centre">Chargement…</p>
+  </main>
+
+  <!-- ================= VUE NACELLISTE ================= -->
+  <main id="vue-nacelliste" class="conteneur hidden">
+
+    <div class="carte-bloc entete-tournee">
+      <div>
+        <div class="tournee-date" id="nac-date"></div>
+        <div class="badge" id="nac-statut">préparée</div>
+      </div>
+      <div id="nac-suivi-actif" class="suivi-actif hidden">
+        <span class="point-vert"></span> Suivi de position activé
+      </div>
+    </div>
+
+    <div id="nac-message" class="msg hidden"></div>
+
+    <!-- Ajout d'une intervention -->
+    <details class="carte-bloc" id="nac-bloc-ajout" open>
+      <summary class="titre-bloc">➕ Ajouter une intervention</summary>
+      <form id="form-intervention">
+        <div class="form-group">
+          <label for="itv-nom">Nom du client <span class="optionnel">(optionnel)</span></label>
+          <input type="text" id="itv-nom" placeholder="ex. M. Dupont" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="itv-adresse">Adresse <b>ou</b> coordonnées « lat;lng »</label>
+          <input type="text" id="itv-adresse" autocomplete="off" required
+                 placeholder="12 rue de la Gare, Douai — ou 50.4348;3.0891">
+        </div>
+        <details class="sous-details">
+          <summary>Infos client (avant / après) — sinon textes par défaut</summary>
+          <div class="form-group">
+            <label for="itv-avant">Message avant l’intervention</label>
+            <textarea id="itv-avant" rows="2" placeholder="(texte par défaut)"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="itv-apres">Message après l’intervention</label>
+            <textarea id="itv-apres" rows="2" placeholder="(texte par défaut)"></textarea>
+          </div>
+        </details>
+        <button type="submit" class="btn btn-secondaire btn-bloc" id="btn-ajouter">Ajouter</button>
+      </form>
+    </details>
+
+    <!-- Actions tournee -->
+    <div class="actions-tournee">
+      <button id="btn-optimiser" class="btn btn-secondaire">🧭 Optimiser l’itinéraire</button>
+      <button id="btn-demarrer"  class="btn btn-primary">▶️ Démarrer la tournée</button>
+      <button id="btn-pause"     class="btn btn-secondaire hidden">⏸️ Pause GPS</button>
+      <button id="btn-terminer-tournee" class="btn btn-danger hidden">⏹️ Terminer la tournée</button>
+    </div>
+
+    <div id="carte-nacelliste" class="carte-leaflet"></div>
+
+    <div id="liste-interventions"></div>
+  </main>
+
+  <!-- ================= VUE ADMIN ================= -->
+  <main id="vue-admin" class="conteneur hidden">
+
+    <nav class="onglets">
+      <button class="onglet actif" data-onglet="tournees">Tournées</button>
+      <button class="onglet" data-onglet="carte">Carte</button>
+      <button class="onglet" data-onglet="comptes">Comptes</button>
+      <button class="onglet" data-onglet="parametres">Paramètres</button>
+    </nav>
+
+    <div id="admin-message" class="msg hidden"></div>
+
+    <!-- Tournees du jour -->
+    <section id="onglet-tournees" class="panneau">
+      <div id="admin-tournees"><p class="centre">Chargement…</p></div>
+    </section>
+
+    <!-- Carte globale temps reel -->
+    <section id="onglet-carte" class="panneau hidden">
+      <p class="note">Position en direct des nacellistes en tournée aujourd’hui.</p>
+      <div id="carte-admin" class="carte-leaflet carte-haute"></div>
+    </section>
+
+    <!-- Comptes nacellistes -->
+    <section id="onglet-comptes" class="panneau hidden">
+      <div class="carte-bloc">
+        <div class="titre-bloc">Créer un compte nacelliste</div>
+        <form id="form-compte">
+          <div class="form-group">
+            <label for="cpt-nom">Nom</label>
+            <input type="text" id="cpt-nom" placeholder="ex. Hamda" required>
+          </div>
+          <div class="form-group">
+            <label for="cpt-login">Identifiant</label>
+            <input type="text" id="cpt-login" placeholder="ex. hamda" required
+                   autocapitalize="none" autocorrect="off" spellcheck="false">
+          </div>
+          <div class="form-group">
+            <label for="cpt-mdp">Mot de passe (8 caractères min.)</label>
+            <input type="text" id="cpt-mdp" required minlength="8"
+                   autocomplete="new-password">
+          </div>
+          <button type="submit" class="btn btn-primary btn-bloc" id="btn-creer-compte">Créer le compte</button>
+        </form>
+      </div>
+      <div id="admin-comptes-liste"></div>
+    </section>
+
+    <!-- Parametres -->
+    <section id="onglet-parametres" class="panneau hidden">
+      <div class="carte-bloc">
+        <div class="titre-bloc">Paramètres</div>
+        <form id="form-parametres">
+          <div class="form-group">
+            <label for="par-temps">Temps d’intervention moyen (minutes, pour l’ETA)</label>
+            <input type="number" id="par-temps" min="1" max="240" required>
+          </div>
+          <div class="form-group">
+            <label for="par-seuil">Retard toléré avant d’afficher le n° au client (minutes)</label>
+            <input type="number" id="par-seuil" min="0" max="240" required>
+          </div>
+          <div class="form-group">
+            <label for="par-tel">Téléphone de contact (affiché au client)</label>
+            <input type="tel" id="par-tel" required>
+          </div>
+          <div class="form-group">
+            <label for="par-avant">« Infos avant » par défaut</label>
+            <textarea id="par-avant" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="par-apres">« Infos après » par défaut</label>
+            <textarea id="par-apres" rows="3"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-bloc" id="btn-parametres">Enregistrer</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="js/supabase-config.js?v=1"></script>
+  <script src="js/geo.js?v=1"></script>
+  <script src="js/itineraire.js?v=1"></script>
+  <script src="js/nacelliste.js?v=1"></script>
+  <script src="js/admin.js?v=1"></script>
+  <script src="js/app.js?v=1"></script>
+</body>
+</html>
