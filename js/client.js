@@ -17,6 +17,7 @@
   let carte = null;
   let marqueurNacelliste = null;
   let marqueurDestination = null;
+  let calqueAutresArrets = null;
   let carteCadree = false;
   let timer = null;
 
@@ -48,10 +49,32 @@
       icon: L.divIcon({ className: '', html: '<div class="marqueur marqueur-maison">🏠</div>',
                         iconSize: [30, 30], iconAnchor: [15, 15] }),
     }).bindPopup('Chez vous').addTo(carte);
+
+    calqueAutresArrets = L.layerGroup().addTo(carte);
+  }
+
+  // Les autres arrets de la tournee : la fonction serveur ne fournit
+  // QUE des coordonnees arrondies + un statut — on les dessine donc
+  // en simples ronds gris muets (pas de popup, pas d'interaction).
+  function majAutresArrets(arrets) {
+    calqueAutresArrets.clearLayers();
+    for (const a of arrets || []) {
+      const fait = a.statut === 'fait';
+      L.circleMarker([a.lat, a.lng], {
+        radius: 6,
+        color: '#64748B',
+        weight: 2,
+        opacity: fait ? 0.35 : 0.9,
+        fillColor: '#94A3B8',
+        fillOpacity: fait ? 0.25 : 0.75,
+        interactive: false,
+      }).addTo(calqueAutresArrets);
+    }
   }
 
   function majCarte(donnees) {
     initCarte(donnees.destination);
+    majAutresArrets(donnees.autres_arrets);
 
     if (donnees.position) {
       const pos = [donnees.position.lat, donnees.position.lng];
@@ -86,11 +109,24 @@
       progression.textContent = 'Vous êtes le prochain arrêt !';
     } else {
       statutTexte.textContent = `${donnees.nacelliste_nom} est en route`;
-      progression.textContent = `Il est à ${donnees.arrets_avant} arrêt${donnees.arrets_avant > 1 ? 's' : ''} de chez vous.`;
+      progression.textContent = `Il y a ${donnees.arrets_avant} arrêt${donnees.arrets_avant > 1 ? 's' : ''} avant vous.`;
     }
 
     $('cli-eta').textContent = donnees.eta ? `≈ ${heure(donnees.eta)}` : 'bientôt disponible';
     $('cli-infos-avant').textContent = donnees.infos_avant || '';
+
+    // Onglet Contact : nacelliste (si renseigne) + responsable,
+    // tous deux cliquables (tel:), pendant TOUTE la tournee.
+    const telNacelliste = donnees.telephone_nacelliste;
+    $('cli-contact-nacelliste').classList.toggle('hidden', !telNacelliste);
+    if (telNacelliste) {
+      const lienNac = $('cli-tel-nacelliste');
+      lienNac.textContent = `📞 ${telephoneLisible(telNacelliste)}`;
+      lienNac.href = `tel:${telNacelliste}`;
+    }
+    const lienResp = $('cli-tel-responsable');
+    lienResp.textContent = `📞 ${telephoneLisible(donnees.telephone)}`;
+    lienResp.href = `tel:${donnees.telephone}`;
 
     // Retard : ETA depassee de plus de X minutes -> numero de contact.
     const enRetard = donnees.eta &&

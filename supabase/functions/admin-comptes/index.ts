@@ -64,6 +64,7 @@ Deno.serve(async (req) => {
   const nom        = String(corps.nom ?? '').trim();
   const login      = String(corps.login ?? '').trim().toLowerCase();
   const motdepasse = String(corps.motdepasse ?? '');
+  const telephone  = String(corps.telephone ?? '').trim() || null;
 
   if (!nom) return json({ erreur: 'Nom manquant' }, 400);
   if (!/^[a-z0-9._-]{3,}$/.test(login))
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
   // desactive ou si la migration n'est pas a jour.
   const { error: errProfil } = await admin.from('profils').upsert({
     id: cree.user.id,
-    nom, role: 'nacelliste', login,
+    nom, role: 'nacelliste', login, telephone,
     actif: true,
   });
 

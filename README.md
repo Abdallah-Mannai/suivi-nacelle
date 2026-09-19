@@ -6,11 +6,15 @@ Trois faces :
 - **Admin** : crée les comptes nacellistes, voit les tournées du jour, une carte globale en
   direct, et règle les paramètres (temps d'intervention moyen, textes, téléphone de contact).
 - **Nacelliste** (mobile) : saisit ses interventions du jour (adresse ou `lat;lng`), obtient un
-  **itinéraire optimisé** (ordre + tracé routier + ETA), **démarre sa tournée** (partage GPS),
+  **itinéraire optimisé** (ordre + tracé routier + ETA) — une **proposition** qu'il peut
+  **réordonner à la main** (flèches ▲▼ ou glisser-déposer, tracé et ETA recalculés dans son
+  ordre, bouton « Ré-optimiser » pour revenir à l'auto) —, **démarre sa tournée** (partage GPS),
   clique **« Terminé »** chez chaque client et lui donne son **lien de suivi**.
 - **Client** (lien unique, sans compte) : voit le nacelliste **en temps réel sur la carte**,
-  son **heure d'arrivée estimée**, la progression (« à X arrêts de chez vous ») et les infos
-  utiles — puis « Intervention terminée ✅ » avec le numéro de contact.
+  son **heure d'arrivée estimée**, la progression (« Il y a N arrêts avant vous »), les autres
+  arrêts de la tournée en **ronds gris anonymes** (coordonnées arrondies côté serveur, jamais
+  de nom ni d'adresse), un **onglet 📞 Contact** (nacelliste + responsable, cliquables) et les
+  infos utiles — puis « Intervention terminée ✅ » avec le numéro de contact.
 
 **100 % gratuit** : JavaScript vanilla (aucun framework, aucun build), Supabase (Auth +
 PostgreSQL + RLS + Realtime), Leaflet + OpenStreetMap, itinéraires OSRM public, géocodage
@@ -24,7 +28,7 @@ Base Adresse Nationale, hébergement GitHub Pages. Aucun secret dans le front.
 
 1. <https://supabase.com> → **New project** (nom : `suivi-nacelle`, région Europe, plan Free).
 2. **SQL Editor** → coller et exécuter `supabase/migrations/nacelle_v1.sql`
-   (idempotent : ré-exécutable sans risque).
+   puis `supabase/migrations/nacelle_v2.sql` (idempotents : ré-exécutables sans risque).
 
 ### 2. Vérifier Realtime
 
@@ -98,7 +102,8 @@ const SUPABASE_ANON_KEY = 'eyJ...';   // clé anon/public UNIQUEMENT
 | Secrets | Uniquement côté Edge Functions (service_role jamais dans le front). |
 | Comptes nacellistes | Créés par l'admin via `admin-comptes` (vérifie que l'appelant est un admin actif). |
 | RLS | Stricte sur toutes les tables : un nacelliste ne voit que **ses** tournées/interventions/positions ; `positions` n'est inscriptible que par son propriétaire. |
-| Lien client | Token ≥ 48 caractères hex aléatoires générés **par la base** ; lecture **seule**, filtrée, via `suivi-client` ; ne renvoie jamais les autres interventions. |
+| Lien client | Token ≥ 48 caractères hex aléatoires générés **par la base** ; lecture **seule**, filtrée, via `suivi-client` ; ne renvoie jamais l'identité des autres interventions. |
+| Points anonymes | Les autres arrêts affichés au client sont anonymisés **côté serveur** : lat/lng arrondis à 3 décimales (~100 m) + statut, triés par latitude (l'ordre du tableau ne révèle pas l'ordre de passage) — ni nom, ni adresse, ni token, ni ETA, ni id. |
 | Expiration | « Terminé » → `token_actif = false` (page « terminé ✅ » + numéro) ; tournée terminée → **tous** les tokens désactivés (lien « expiré », aucune donnée). |
 | Vie privée GPS | Position captée **uniquement** pendant `en_cours`, bandeau « Suivi de position activé » visible, bouton pause, envoi toutes les ~25 s, purge automatique à 48 h. |
 

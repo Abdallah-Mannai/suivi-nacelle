@@ -190,7 +190,7 @@ const AdminApp = (() => {
   async function chargerComptes() {
     const { data: comptes } = await sb
       .from('profils')
-      .select('id, nom, login, role, actif')
+      .select('id, nom, login, role, actif, telephone')
       .eq('role', 'nacelliste')
       .order('nom');
 
@@ -204,8 +204,9 @@ const AdminApp = (() => {
       <div class="carte-bloc intervention-entete" data-id="${c.id}">
         <div class="intervention-infos">
           <div class="intervention-nom">${echap(c.nom)} ${c.actif ? '' : '<span class="badge badge-inactif">désactivé</span>'}</div>
-          <div class="note">identifiant : ${echap(c.login || '?')}</div>
+          <div class="note">identifiant : ${echap(c.login || '?')} — 📞 ${echap(c.telephone || 'non renseigné')}</div>
         </div>
+        <button class="btn btn-petit btn-secondaire act-telephone" title="Modifier le téléphone">📞</button>
         <button class="btn btn-petit ${c.actif ? 'btn-danger' : 'btn-secondaire'} act-basculer">
           ${c.actif ? 'Désactiver' : 'Réactiver'}
         </button>
@@ -216,6 +217,19 @@ const AdminApp = (() => {
         const ligne = e.target.closest('[data-id]');
         const compte = comptes.find((c) => c.id === ligne.dataset.id);
         await sb.from('profils').update({ actif: !compte.actif }).eq('id', compte.id);
+        chargerComptes();
+      }));
+
+    conteneur.querySelectorAll('.act-telephone').forEach((b) =>
+      b.addEventListener('click', async (e) => {
+        const ligne = e.target.closest('[data-id]');
+        const compte = comptes.find((c) => c.id === ligne.dataset.id);
+        const saisie = prompt(`Téléphone de ${compte.nom} (montré au client dans l’onglet Contact) :`,
+          compte.telephone || '');
+        if (saisie === null) return;
+        const { error } = await sb.from('profils')
+          .update({ telephone: saisie.trim() || null }).eq('id', compte.id);
+        message(error ? error.message : 'Téléphone mis à jour.', error ? 'erreur' : 'ok');
         chargerComptes();
       }));
   }
@@ -241,6 +255,7 @@ const AdminApp = (() => {
           nom: $('cpt-nom').value.trim(),
           login: $('cpt-login').value.trim(),
           motdepasse: $('cpt-mdp').value,
+          telephone: $('cpt-tel').value.trim(),
         }),
       });
       const resultat = await reponse.json();

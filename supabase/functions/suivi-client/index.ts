@@ -7,9 +7,13 @@
 // pour un token valide, STRICTEMENT le minimum :
 //   - la derniere position du nacelliste (un seul point),
 //   - l'ETA chez CE client, la progression (« a X arrets »),
-//   - les infos avant / apres, le telephone de contact.
-// JAMAIS la liste des autres interventions, ni leurs adresses, ni
-// quoi que ce soit d'autre. Un token inconnu/expire ne renvoie RIEN.
+//   - les infos avant / apres, les telephones de contact
+//     (nacelliste + responsable),
+//   - les AUTRES arrets de la tournee sous forme STRICTEMENT
+//     anonyme : lat/lng arrondis a 3 decimales (~100 m) + statut,
+//     tries par latitude pour ne pas trahir l'ordre de passage.
+// JAMAIS l'adresse, le nom, le token ou l'ETA d'un autre client.
+// Un token inconnu/expire ne renvoie RIEN.
 //
 // Deploiement (PUBLIQUE : le client n'a pas de JWT) :
 //   supabase functions deploy suivi-client --no-verify-jwt
@@ -75,13 +79,23 @@ Deno.serve(async (req) => {
     return json({ etat: 'expire' }, 410);
   }
 
-  // Intervention faite : message « termine » + infos apres + numero.
+  // Le nacelliste de la tournee : prenom + telephone (onglet Contact).
+  const { data: nacelliste } = await admin
+    .from('profils')
+    .select('nom, telephone')
+    .eq('id', tournee.nacelliste_id)
+    .maybeSingle();
+
+  const telephoneNacelliste = nacelliste?.telephone || null;
+
+  // Intervention faite : message « termine » + infos apres + numeros.
   if (itv.statut === 'faite') {
     return json({
       etat: 'termine',
       faite_at: itv.faite_at,
       infos_apres: itv.infos_apres || params?.infos_apres_defaut || '',
       telephone,
+      telephone_nacelliste: telephoneNacelliste,
     });
   }
 
@@ -107,12 +121,27 @@ Deno.serve(async (req) => {
     .eq('statut', 'a_faire')
     .lt('ordre', itv.ordre);
 
-  // Le nom du nacelliste (prenom seul suffit au client).
-  const { data: nacelliste } = await admin
-    .from('profils')
-    .select('nom')
-    .eq('id', tournee.nacelliste_id)
-    .maybeSingle();
+  // Les AUTRES arrets de la tournee, ANONYMISES au maximum :
+  //   - lat/lng arrondis a 3 decimales (~100 m) : impossible de
+  //     retrouver une adresse precise,
+  //   - statut fait / a_faire (pour griser les arrets deja faits),
+  //   - RIEN d'autre (ni nom, ni adresse, ni token, ni ETA, ni id),
+  //   - tries par latitude puis longitude : l'ORDRE du tableau ne
+  //     revele pas l'ordre de passage de la tournee.
+  const { data: autres } = await admin
+    .from('interventions')
+    .select('id, lat, lng, statut')
+    .eq('tournee_id', itv.tournee_id);
+
+  const arrondi = (x: number) => Math.round(x * 1000) / 1000;
+  const autresArrets = (autres ?? [])
+    .filter((a) => a.id !== itv.id)
+    .map((a) => ({
+      lat: arrondi(a.lat),
+      lng: arrondi(a.lng),
+      statut: a.statut === 'faite' ? 'fait' : 'a_faire',
+    }))
+    .sort((a, b) => (a.lat - b.lat) || (a.lng - b.lng));
 
   return json({
     etat: 'suivi',
@@ -122,8 +151,10 @@ Deno.serve(async (req) => {
     eta: itv.eta,
     arrets_avant: count ?? 0,
     destination: { lat: itv.lat, lng: itv.lng },    // l'adresse DU client lui-meme
+    autres_arrets: autresArrets,                    // points anonymes (voir ci-dessus)
     infos_avant: itv.infos_avant || params?.infos_avant_defaut || '',
     seuil_retard_min: params?.seuil_retard_min ?? 15,
-    telephone,                                      // affiche cote client SEULEMENT si retard
+    telephone,                                      // responsable (retard + onglet Contact)
+    telephone_nacelliste: telephoneNacelliste,      // onglet Contact
   });
 });

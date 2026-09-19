@@ -30,6 +30,8 @@ const NacellisteApp = (() => {
   let dernierePosition = null;
   let timerEta = null;
   let recalculEnCours = false;
+  let reordonnancementEnCours = false;
+  let idEnDeplacement = null;
 
   // ---------- utilitaires ----------
 
@@ -192,10 +194,24 @@ const NacellisteApp = (() => {
     }
 
     const tri = interventions.slice().sort((a, b) => (a.ordre - b.ordre));
-    conteneur.innerHTML = tri.map((itv) => {
+    const restantesTriees = tri.filter((i) => i.statut === 'a_faire');
+    const reordonnable = !terminee && restantesTriees.length > 1;
+
+    const entete = reordonnable
+      ? '<p class="note note-reordonner">✋ Glissez-déposez une carte ou utilisez ▲▼ pour changer l’ordre de passage — le trajet et les ETA se recalculent.</p>'
+      : '';
+
+    conteneur.innerHTML = entete + tri.map((itv) => {
       const fait = itv.statut === 'faite';
+      const posRestante = restantesTriees.findIndex((i) => i.id === itv.id);
+      const fleches = (!fait && reordonnable) ? `
+          <div class="reordonner">
+            <button class="btn-fleche act-monter" title="Monter" ${posRestante === 0 ? 'disabled' : ''}>▲</button>
+            <button class="btn-fleche act-descendre" title="Descendre" ${posRestante === restantesTriees.length - 1 ? 'disabled' : ''}>▼</button>
+          </div>` : '';
       return `
-      <div class="carte-bloc intervention ${fait ? 'intervention-faite' : ''}" data-id="${itv.id}">
+      <div class="carte-bloc intervention ${fait ? 'intervention-faite' : ''}" data-id="${itv.id}"
+           ${(!fait && reordonnable) ? 'draggable="true"' : ''}>
         <div class="intervention-entete">
           <span class="pastille ${fait ? 'pastille-faite' : ''}">${fait ? '✓' : (itv.ordre || '•')}</span>
           <div class="intervention-infos">
@@ -203,6 +219,7 @@ const NacellisteApp = (() => {
             <div class="intervention-adresse">${echap(itv.adresse)}</div>
           </div>
           <div class="intervention-eta">${fait ? heure(itv.faite_at) : (itv.eta ? '≈ ' + heure(itv.eta) : '')}</div>
+          ${fleches}
         </div>
         <div class="intervention-actions">
           ${fait ? '<span class="note">Terminée ✅ — lien client désactivé</span>' : `
@@ -220,6 +237,11 @@ const NacellisteApp = (() => {
       b.addEventListener('click', (e) => terminerIntervention(idDe(e))));
     conteneur.querySelectorAll('.act-supprimer').forEach((b) =>
       b.addEventListener('click', (e) => supprimerIntervention(idDe(e))));
+    conteneur.querySelectorAll('.act-monter').forEach((b) =>
+      b.addEventListener('click', (e) => deplacerIntervention(idDe(e), -1)));
+    conteneur.querySelectorAll('.act-descendre').forEach((b) =>
+      b.addEventListener('click', (e) => deplacerIntervention(idDe(e), +1)));
+    brancherGlisserDeposer(conteneur);
 
     rendreCarte(null);
   }
@@ -278,6 +300,109 @@ const NacellisteApp = (() => {
     await sb.from('interventions').delete().eq('id', id);
     interventions = interventions.filter((i) => i.id !== id);
     rendre();
+  }
+
+  // ---------- reordonnancement manuel ----------
+  // L'itineraire optimise n'est qu'une PROPOSITION : le nacelliste
+  // peut changer l'ordre a la main (fleches ▲▼ ou glisser-deposer).
+  // On sauve le nouvel ordre, puis on recalcule le trace routier et
+  // les ETA dans CET ordre — sans jamais re-optimiser dans son dos.
+
+  function restantesDansLOrdre() {
+    return interventions.filter((i) => i.statut === 'a_faire')
+      .sort((a, b) => a.ordre - b.ordre);
+  }
+
+  // Deplace une intervention « a faire » d'un cran (fleches ▲▼).
+  function deplacerIntervention(id, delta) {
+    const restantes = restantesDansLOrdre();
+    const idx = restantes.findIndex((i) => i.id === id);
+    const cible = idx + delta;
+    if (idx < 0 || cible < 0 || cible >= restantes.length) return;
+    [restantes[idx], restantes[cible]] = [restantes[cible], restantes[idx]];
+    appliquerNouvelOrdre(restantes);
+  }
+
+  // Glisser-deposer (souris / desktop ; sur mobile les fleches font foi).
+  function brancherGlisserDeposer(conteneur) {
+    conteneur.querySelectorAll('.intervention[draggable="true"]').forEach((el) => {
+      el.addEventListener('dragstart', (e) => {
+        idEnDeplacement = el.dataset.id;
+        el.classList.add('en-deplacement');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox exige un setData pour demarrer le drag.
+        e.dataTransfer.setData('text/plain', el.dataset.id);
+      });
+      el.addEventListener('dragend', () => {
+        idEnDeplacement = null;
+        el.classList.remove('en-deplacement');
+      });
+      el.addEventListener('dragover', (e) => {
+        if (idEnDeplacement && idEnDeplacement !== el.dataset.id) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+        }
+      });
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!idEnDeplacement || idEnDeplacement === el.dataset.id) return;
+        const restantes = restantesDansLOrdre();
+        const de = restantes.findIndex((i) => i.id === idEnDeplacement);
+        const vers = restantes.findIndex((i) => i.id === el.dataset.id);
+        idEnDeplacement = null;
+        if (de < 0 || vers < 0) return;
+        const [deplacee] = restantes.splice(de, 1);
+        restantes.splice(vers, 0, deplacee);
+        appliquerNouvelOrdre(restantes);
+      });
+    });
+  }
+
+  // Renumerote tout (les « faites » gardent le debut, les restantes
+  // prennent la suite dans l'ordre demande), sauve en base, puis
+  // recale trace + ETA dans ce nouvel ordre.
+  async function appliquerNouvelOrdre(restantesOrdonnees) {
+    if (reordonnancementEnCours) return;   // pas de sauvegardes croisees
+    reordonnancementEnCours = true;
+    try {
+      const faites = interventions.filter((i) => i.statut === 'faite')
+        .sort((a, b) => new Date(a.faite_at || 0) - new Date(b.faite_at || 0));
+      let n = 0;
+      const nouvelOrdre = new Map();
+      for (const i of faites) nouvelOrdre.set(i.id, ++n);
+      for (const i of restantesOrdonnees) nouvelOrdre.set(i.id, ++n);
+
+      await Promise.all(interventions.map((itv) =>
+        sb.from('interventions').update({ ordre: nouvelOrdre.get(itv.id) }).eq('id', itv.id)));
+      interventions.forEach((itv) => { itv.ordre = nouvelOrdre.get(itv.id); });
+      rendre();
+    } finally {
+      reordonnancementEnCours = false;
+    }
+    await recalculerRouteOrdreCourant();
+  }
+
+  // Rappel OSRM dans l'ordre COURANT (celui choisi a la main) :
+  // nouveau trace + nouvelles ETA, ordre inchange.
+  async function recalculerRouteOrdreCourant() {
+    const restantes = restantesDansLOrdre();
+    if (!restantes.length) return;
+    try {
+      const depart = dernierePosition
+        || await positionActuelle()
+        || { lat: restantes[0].lat, lng: restantes[0].lng };
+      const route = await itineraireOsrm(depart, restantes.map((i) => ({ lat: i.lat, lng: i.lng })));
+      const etas = calculerEtas(new Date(), route.durees, parametres.temps_intervention_min);
+      await Promise.all(restantes.map((itv, k) =>
+        sb.from('interventions').update({ eta: etas[k].toISOString() }).eq('id', itv.id)));
+      restantes.forEach((itv, k) => { itv.eta = etas[k].toISOString(); });
+      rendre();
+      rendreCarte(route.geometrie);
+      message('Nouvel ordre enregistré — trajet et ETA recalculés.', 'ok');
+    } catch (err) {
+      // OSRM injoignable : l'ordre est quand meme sauve.
+      message(`Nouvel ordre enregistré. ${err.message}`, 'info');
+    }
   }
 
   // ---------- optimisation + ETA ----------
@@ -342,12 +467,12 @@ const NacellisteApp = (() => {
       rendre();
       rendreCarte(route.geometrie);
       const km = (route.distance / 1000).toFixed(1);
-      message(`Itinéraire optimisé : ${ordonnees.length} arrêts, ${km} km de route.`, 'ok');
+      message(`Itinéraire optimisé : ${ordonnees.length} arrêts, ${km} km de route. C’est une proposition — réordonnez à la main si besoin.`, 'ok');
     } catch (err) {
       message(err.message, 'erreur');
     } finally {
       btn.disabled = false;
-      btn.textContent = '🧭 Optimiser l’itinéraire';
+      btn.textContent = '🧭 Ré-optimiser (auto)';
     }
   }
 

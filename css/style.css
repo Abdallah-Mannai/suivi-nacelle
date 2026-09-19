@@ -299,6 +299,39 @@ details.carte-bloc[open] summary { margin-bottom: 10px; }
 
 .intervention-faite { opacity: .72; }
 
+/* Reordonnancement manuel (fleches + glisser-deposer) */
+
+.note-reordonner { margin: 0 2px 10px; }
+
+.reordonner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.btn-fleche {
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 1.5px solid var(--bord);
+  border-radius: 8px;
+  background: var(--carte);
+  color: var(--bleu);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.btn-fleche:active { background: var(--fond); }
+.btn-fleche:disabled { opacity: .3; cursor: default; }
+
+.intervention[draggable="true"] { cursor: grab; }
+.intervention.en-deplacement {
+  opacity: .45;
+  border-style: dashed;
+  border-color: var(--orange);
+}
+
 .intervention-actions {
   display: flex;
   flex-wrap: wrap;
@@ -374,6 +407,23 @@ details.carte-bloc[open] summary { margin-bottom: 10px; }
 
 .bloc-telephone { margin-top: 16px; font-weight: 600; }
 .bloc-telephone .btn { margin-top: 10px; font-size: 17px; text-decoration: none; }
+
+.legende-carte { margin: -6px 2px 12px; }
+
+/* Onglet Contact (page client) */
+
+#cli-contact summary { cursor: pointer; margin-bottom: 0; }
+#cli-contact[open] summary { margin-bottom: 10px; }
+
+.contact-ligne {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  font-weight: 600;
+}
+.contact-ligne .btn { text-decoration: none; white-space: nowrap; }
 
 /* ---------- ecran un peu plus large ---------- */
 

@@ -8,7 +8,7 @@
   <title>Suivi de votre intervention fibre</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="css/style.css?v=1">
+  <link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body class="page-client">
 
@@ -63,11 +63,25 @@
       </div>
 
       <div id="carte-client" class="carte-leaflet carte-haute"></div>
+      <p class="note legende-carte">⚪ Ronds gris : autres arrêts de la tournée (anonymes)</p>
 
       <div class="carte-bloc">
         <div class="titre-bloc">ℹ️ Avant l’intervention</div>
         <p id="cli-infos-avant" class="note"></p>
       </div>
+
+      <!-- Onglet Contact : visible PENDANT toute la tournee -->
+      <details class="carte-bloc" id="cli-contact">
+        <summary class="titre-bloc">📞 Contact</summary>
+        <div id="cli-contact-nacelliste" class="contact-ligne hidden">
+          <span>Votre nacelliste</span>
+          <a id="cli-tel-nacelliste" class="btn btn-petit btn-secondaire" href="tel:"></a>
+        </div>
+        <div class="contact-ligne">
+          <span>Responsable</span>
+          <a id="cli-tel-responsable" class="btn btn-petit btn-primary" href="tel:"></a>
+        </div>
+      </details>
     </div>
 
   </main>
@@ -75,6 +89,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="js/supabase-config.js?v=1"></script>
-  <script src="js/client.js?v=1"></script>
+  <script src="js/client.js?v=2"></script>
 </body>
 </html>

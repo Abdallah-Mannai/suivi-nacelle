@@ -7,7 +7,7 @@
   <title>Suivi Nacelle</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="css/style.css?v=1">
+  <link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
 
@@ -68,7 +68,7 @@
 
     <!-- Actions tournee -->
     <div class="actions-tournee">
-      <button id="btn-optimiser" class="btn btn-secondaire">🧭 Optimiser l’itinéraire</button>
+      <button id="btn-optimiser" class="btn btn-secondaire">🧭 Ré-optimiser (auto)</button>
       <button id="btn-demarrer"  class="btn btn-primary">▶️ Démarrer la tournée</button>
       <button id="btn-pause"     class="btn btn-secondaire hidden">⏸️ Pause GPS</button>
       <button id="btn-terminer-tournee" class="btn btn-danger hidden">⏹️ Terminer la tournée</button>
@@ -121,6 +121,10 @@
             <input type="text" id="cpt-mdp" required minlength="8"
                    autocomplete="new-password">
           </div>
+          <div class="form-group">
+            <label for="cpt-tel">Téléphone <span class="optionnel">(montré au client — onglet Contact)</span></label>
+            <input type="tel" id="cpt-tel" placeholder="ex. 0612345678" autocomplete="off">
+          </div>
           <button type="submit" class="btn btn-primary btn-bloc" id="btn-creer-compte">Créer le compte</button>
         </form>
       </div>
@@ -164,8 +168,8 @@
   <script src="js/supabase-config.js?v=1"></script>
   <script src="js/geo.js?v=1"></script>
   <script src="js/itineraire.js?v=1"></script>
-  <script src="js/nacelliste.js?v=1"></script>
-  <script src="js/admin.js?v=1"></script>
+  <script src="js/nacelliste.js?v=2"></script>
+  <script src="js/admin.js?v=2"></script>
   <script src="js/app.js?v=1"></script>
 </body>
 </html>
