@@ -126,10 +126,13 @@ const NacellisteApp = (() => {
     calqueRoute = L.layerGroup().addTo(carte);
   }
 
-  function icone(numero, fait) {
+  function icone(numero, statut) {
+    const fait = statut === 'faite';
+    const enCours = statut === 'en_cours';
+    const contenu = fait ? '✓' : (enCours ? '▶' : numero);
     return L.divIcon({
       className: '',
-      html: `<div class="marqueur ${fait ? 'marqueur-fait' : ''}">${fait ? '✓' : numero}</div>`,
+      html: `<div class="marqueur ${fait ? 'marqueur-fait' : ''} ${enCours ? 'marqueur-encours' : ''}">${contenu}</div>`,
       iconSize: [30, 30], iconAnchor: [15, 15],
     });
   }
@@ -141,7 +144,7 @@ const NacellisteApp = (() => {
     const bornes = [];
     for (const itv of interventions) {
       bornes.push([itv.lat, itv.lng]);
-      L.marker([itv.lat, itv.lng], { icon: icone(itv.ordre || '•', itv.statut === 'faite') })
+      L.marker([itv.lat, itv.lng], { icon: icone(itv.ordre || '•', itv.statut) })
         .bindPopup(`${echap(itv.client_nom || 'Client')}<br>${echap(itv.adresse)}`)
         .addTo(calquePoints);
     }
@@ -194,7 +197,7 @@ const NacellisteApp = (() => {
     }
 
     const tri = interventions.slice().sort((a, b) => (a.ordre - b.ordre));
-    const restantesTriees = tri.filter((i) => i.statut === 'a_faire');
+    const restantesTriees = tri.filter((i) => i.statut !== 'faite');
     const reordonnable = !terminee && restantesTriees.length > 1;
 
     const entete = reordonnable
@@ -203,38 +206,53 @@ const NacellisteApp = (() => {
 
     conteneur.innerHTML = entete + tri.map((itv) => {
       const fait = itv.statut === 'faite';
+      const enCours = itv.statut === 'en_cours';
       const posRestante = restantesTriees.findIndex((i) => i.id === itv.id);
       const fleches = (!fait && reordonnable) ? `
           <div class="reordonner">
             <button class="btn-fleche act-monter" title="Monter" ${posRestante === 0 ? 'disabled' : ''}>▲</button>
             <button class="btn-fleche act-descendre" title="Descendre" ${posRestante === restantesTriees.length - 1 ? 'disabled' : ''}>▼</button>
           </div>` : '';
+      const pastille = fait ? '✓' : (enCours ? '▶' : (itv.ordre || '•'));
+      const etaCellule = fait ? heure(itv.faite_at)
+        : (enCours ? 'en cours' : (itv.eta ? '≈ ' + heure(itv.eta) : ''));
+      const actions = fait ? `
+            <span class="note">Terminée ✅ — lien client désactivé</span>
+            <button class="btn btn-petit btn-lien act-revenir">↩️ Revenir</button>
+          ` : enCours ? `
+            <button class="btn btn-petit btn-primary act-terminer">✅ Terminé</button>
+            <button class="btn btn-petit btn-secondaire act-copier">🔗 Copier le lien client</button>
+            <button class="btn btn-petit btn-lien act-revenir">↩️ Revenir</button>
+          ` : `
+            <button class="btn btn-petit btn-primary act-commencer">▶️ Je commence</button>
+            <button class="btn btn-petit btn-secondaire act-copier">🔗 Copier le lien client</button>
+            <button class="btn btn-petit btn-secondaire act-terminer">✅ Terminé</button>
+            ${tournee.statut === 'preparee' ? '<button class="btn btn-petit btn-lien act-supprimer">Supprimer</button>' : ''}
+          `;
       return `
-      <div class="carte-bloc intervention ${fait ? 'intervention-faite' : ''}" data-id="${itv.id}"
+      <div class="carte-bloc intervention ${fait ? 'intervention-faite' : ''} ${enCours ? 'intervention-encours' : ''}" data-id="${itv.id}"
            ${(!fait && reordonnable) ? 'draggable="true"' : ''}>
         <div class="intervention-entete">
-          <span class="pastille ${fait ? 'pastille-faite' : ''}">${fait ? '✓' : (itv.ordre || '•')}</span>
+          <span class="pastille ${fait ? 'pastille-faite' : ''} ${enCours ? 'pastille-encours' : ''}">${pastille}</span>
           <div class="intervention-infos">
-            <div class="intervention-nom">${echap(itv.client_nom || 'Client')}</div>
+            <div class="intervention-nom">${echap(itv.client_nom || 'Client')}${enCours ? ' <span class="badge badge-en_cours">en cours</span>' : ''}</div>
             <div class="intervention-adresse">${echap(itv.adresse)}</div>
           </div>
-          <div class="intervention-eta">${fait ? heure(itv.faite_at) : (itv.eta ? '≈ ' + heure(itv.eta) : '')}</div>
+          <div class="intervention-eta">${etaCellule}</div>
           ${fleches}
         </div>
-        <div class="intervention-actions">
-          ${fait ? '<span class="note">Terminée ✅ — lien client désactivé</span>' : `
-            <button class="btn btn-petit btn-secondaire act-copier">🔗 Copier le lien client</button>
-            <button class="btn btn-petit btn-primary act-terminer">✅ Terminé</button>
-            ${tournee.statut === 'preparee' ? '<button class="btn btn-petit btn-lien act-supprimer">Supprimer</button>' : ''}
-          `}
-        </div>
+        <div class="intervention-actions">${actions}</div>
       </div>`;
     }).join('');
 
     conteneur.querySelectorAll('.act-copier').forEach((b) =>
       b.addEventListener('click', (e) => copierLien(idDe(e))));
+    conteneur.querySelectorAll('.act-commencer').forEach((b) =>
+      b.addEventListener('click', (e) => commencerIntervention(idDe(e))));
     conteneur.querySelectorAll('.act-terminer').forEach((b) =>
       b.addEventListener('click', (e) => terminerIntervention(idDe(e))));
+    conteneur.querySelectorAll('.act-revenir').forEach((b) =>
+      b.addEventListener('click', (e) => revenirIntervention(idDe(e))));
     conteneur.querySelectorAll('.act-supprimer').forEach((b) =>
       b.addEventListener('click', (e) => supprimerIntervention(idDe(e))));
     conteneur.querySelectorAll('.act-monter').forEach((b) =>
@@ -308,9 +326,18 @@ const NacellisteApp = (() => {
   // On sauve le nouvel ordre, puis on recalcule le trace routier et
   // les ETA dans CET ordre — sans jamais re-optimiser dans son dos.
 
+  // Arrets non termines (a_faire + en_cours) dans l'ordre affiche.
   function restantesDansLOrdre() {
-    return interventions.filter((i) => i.statut === 'a_faire')
+    return interventions.filter((i) => i.statut !== 'faite')
       .sort((a, b) => a.ordre - b.ordre);
+  }
+
+  // Meme liste, mais pour la ROUTE et les ETA : l'arret « en cours »
+  // passe devant (c'est la que le nacelliste se trouve).
+  function restantesPourRoute() {
+    return interventions.filter((i) => i.statut !== 'faite')
+      .sort((a, b) =>
+        ((b.statut === 'en_cours') - (a.statut === 'en_cours')) || (a.ordre - b.ordre));
   }
 
   // Deplace une intervention « a faire » d'un cran (fleches ▲▼).
@@ -385,7 +412,7 @@ const NacellisteApp = (() => {
   // Rappel OSRM dans l'ordre COURANT (celui choisi a la main) :
   // nouveau trace + nouvelles ETA, ordre inchange.
   async function recalculerRouteOrdreCourant() {
-    const restantes = restantesDansLOrdre();
+    const restantes = restantesPourRoute();
     if (!restantes.length) return;
     try {
       const depart = dernierePosition
@@ -419,8 +446,11 @@ const NacellisteApp = (() => {
   }
 
   async function optimiser() {
+    // L'arret « en cours » n'est pas re-melange : il reste en tete
+    // (le nacelliste y est) ; on optimise le reste.
+    const enCoursActuels = interventions.filter((i) => i.statut === 'en_cours');
     const restantes = interventions.filter((i) => i.statut === 'a_faire');
-    if (!restantes.length) { message('Aucune intervention à optimiser.', 'info'); return; }
+    if (!restantes.length && !enCoursActuels.length) { message('Aucune intervention à optimiser.', 'info'); return; }
 
     const btn = $('btn-optimiser');
     btn.disabled = true;
@@ -430,12 +460,15 @@ const NacellisteApp = (() => {
     try {
       // Point de depart : ma position si le GPS repond, sinon le
       // premier point saisi.
+      const premierPoint = enCoursActuels[0] || restantes[0];
       const depart = dernierePosition
         || await positionActuelle()
-        || { lat: restantes[0].lat, lng: restantes[0].lng };
+        || { lat: premierPoint.lat, lng: premierPoint.lng };
 
-      const ordreIdx = ordonnerPoints(depart, restantes.map((i) => ({ lat: i.lat, lng: i.lng })));
-      const ordonnees = ordreIdx.map((k) => restantes[k]);
+      const ordreIdx = ordonnerPoints(
+        enCoursActuels[0] ? { lat: enCoursActuels[0].lat, lng: enCoursActuels[0].lng } : depart,
+        restantes.map((i) => ({ lat: i.lat, lng: i.lng })));
+      const ordonnees = [...enCoursActuels, ...ordreIdx.map((k) => restantes[k])];
 
       // Numerotation continue : les « faites » gardent le debut,
       // les restantes prennent la suite dans l'ordre optimise.
@@ -481,8 +514,7 @@ const NacellisteApp = (() => {
   // deja etabli (pas de re-optimisation surprise pour le nacelliste).
   async function recalculerEtas() {
     if (recalculEnCours || !dernierePosition || tournee.statut !== 'en_cours') return;
-    const restantes = interventions.filter((i) => i.statut === 'a_faire')
-      .sort((a, b) => a.ordre - b.ordre);
+    const restantes = restantesPourRoute();
     if (!restantes.length) return;
 
     recalculEnCours = true;
@@ -571,6 +603,50 @@ const NacellisteApp = (() => {
       : '<span class="point-vert"></span> Suivi de position activé';
   }
 
+  // « Je commence » : cet arret passe en_cours. Un SEUL arret en
+  // cours a la fois : l'eventuel autre repasse « a faire ».
+  async function commencerIntervention(id) {
+    const autre = interventions.find((i) => i.statut === 'en_cours' && i.id !== id);
+    if (autre) {
+      const { data: dAutre, error: eAutre } = await sb.from('interventions')
+        .update({ statut: 'a_faire' }).eq('id', autre.id).select().single();
+      if (eAutre) { message(eAutre.message, 'erreur'); return; }
+      interventions = interventions.map((i) => (i.id === autre.id ? dAutre : i));
+    }
+    const { data, error } = await sb.from('interventions')
+      .update({ statut: 'en_cours' }).eq('id', id).select().single();
+    if (error) { message(error.message, 'erreur'); return; }
+    interventions = interventions.map((i) => (i.id === id ? data : i));
+    rendre();
+    recalculerEtas();
+    message(autre
+      ? 'Intervention commencée — la précédente « en cours » est repassée « à faire ».'
+      : 'Intervention commencée — le client voit « le nacelliste est arrivé ».', 'ok');
+  }
+
+  // « Revenir » : rouvre un arret (faite ou en_cours -> a_faire).
+  // Si l'arret etait « faite », le trigger serveur REACTIVE son lien
+  // client, et le changement est journalise en base.
+  async function revenirIntervention(id) {
+    const itv = interventions.find((i) => i.id === id);
+    if (!itv) return;
+    const etaitFaite = itv.statut === 'faite';
+    const question = etaitFaite
+      ? 'Rouvrir cet arrêt ?\nIl repasse « à faire » et le lien client est RÉACTIVÉ.'
+      : 'Remettre cet arrêt « à faire » ?';
+    if (!confirm(question)) return;
+
+    const { data, error } = await sb.from('interventions')
+      .update({ statut: 'a_faire' }).eq('id', id).select().single();
+    if (error) { message(error.message, 'erreur'); return; }
+    interventions = interventions.map((i) => (i.id === id ? data : i));
+    rendre();
+    recalculerEtas();
+    message(etaitFaite
+      ? 'Arrêt rouvert — le lien client est de nouveau actif.'
+      : 'Arrêt remis « à faire ».', 'ok');
+  }
+
   async function terminerIntervention(id) {
     if (!confirm('Marquer cette intervention comme terminée ?\nLe lien client affichera « terminé » et sera désactivé.')) return;
     const { data, error } = await sb.from('interventions')
@@ -581,13 +657,13 @@ const NacellisteApp = (() => {
     rendre();
     recalculerEtas();
 
-    if (!interventions.some((i) => i.statut === 'a_faire')) {
+    if (!interventions.some((i) => i.statut !== 'faite')) {
       message('Tous les clients sont faits 🎉 — vous pouvez terminer la tournée.', 'ok');
     }
   }
 
   async function terminerTournee() {
-    const restantes = interventions.filter((i) => i.statut === 'a_faire').length;
+    const restantes = interventions.filter((i) => i.statut !== 'faite').length;
     const avertissement = restantes
       ? `Il reste ${restantes} intervention(s) non faite(s).\n`
       : '';

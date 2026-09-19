@@ -104,7 +104,7 @@ const AdminApp = (() => {
         </div>
         ${liste.map((i) => `
           <div class="admin-itv ${i.statut === 'faite' ? 'intervention-faite' : ''}">
-            <span class="pastille pastille-petite ${i.statut === 'faite' ? 'pastille-faite' : ''}">${i.statut === 'faite' ? '✓' : (i.ordre || '•')}</span>
+            <span class="pastille pastille-petite ${i.statut === 'faite' ? 'pastille-faite' : (i.statut === 'en_cours' ? 'pastille-encours' : '')}">${i.statut === 'faite' ? '✓' : (i.statut === 'en_cours' ? '▶' : (i.ordre || '•'))}</span>
             <span class="admin-itv-adresse">${echap(i.client_nom ? i.client_nom + ' — ' : '')}${echap(i.adresse)}</span>
             <span class="intervention-eta">${i.statut === 'faite' ? heure(i.faite_at) : (i.eta ? '≈ ' + heure(i.eta) : '')}</span>
           </div>`).join('')}

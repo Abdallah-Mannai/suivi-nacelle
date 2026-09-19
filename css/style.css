@@ -256,6 +256,7 @@ details.carte-bloc[open] summary { margin-bottom: 10px; }
   box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
 .marqueur-fait { background: var(--vert); }
+.marqueur-encours { animation: pulse-orange 1.6s infinite; }
 .marqueur-maison { background: var(--bleu); font-size: 15px; }
 
 .marqueur-moi {
@@ -290,7 +291,14 @@ details.carte-bloc[open] summary { margin-bottom: 10px; }
   font-weight: 800;
 }
 .pastille-faite { background: var(--vert); }
+.pastille-encours { background: var(--orange); animation: pulse-orange 1.6s infinite; }
 .pastille-petite { width: 22px; height: 22px; font-size: 12px; }
+
+@keyframes pulse-orange {
+  0%   { box-shadow: 0 0 0 0 rgba(232, 113, 10, .5); }
+  70%  { box-shadow: 0 0 0 8px rgba(232, 113, 10, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(232, 113, 10, 0); }
+}
 
 .intervention-infos { flex: 1; min-width: 0; }
 .intervention-nom { font-weight: 700; }
@@ -298,6 +306,7 @@ details.carte-bloc[open] summary { margin-bottom: 10px; }
 .intervention-eta { font-size: 13px; font-weight: 700; color: var(--orange-fonce); white-space: nowrap; }
 
 .intervention-faite { opacity: .72; }
+.intervention-encours { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
 
 /* Reordonnancement manuel (fleches + glisser-deposer) */
 
@@ -372,48 +381,179 @@ details.carte-bloc[open] summary { margin-bottom: 10px; }
 }
 .admin-itv-adresse { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
-/* ---------- page client ---------- */
+/* ============================================================
+   Page client — carte plein ecran + bandeau bas (bottom sheet),
+   facon appli de livraison. Mobile-first, gros textes.
+   ============================================================ */
 
 .gros-emoji { font-size: 52px; margin: 8px 0; }
 
-.cli-statut {
+.page-client { background: var(--bleu); }
+
+/* Ecrans centres (chargement, lien invalide, termine) */
+
+.ecran-centre {
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 16px;
-  margin-bottom: 12px;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(160deg, var(--bleu) 0%, var(--bleu-clair) 100%);
 }
 
-.cli-eta {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  background: var(--fond);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-bottom: 10px;
+.ecran-carte {
+  background: var(--carte);
+  border-radius: 20px;
+  padding: 30px 24px;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
 }
-.cli-eta-libelle { font-size: 13px; color: var(--texte-doux); font-weight: 600; }
-.cli-eta-heure { font-size: 26px; font-weight: 800; color: var(--orange-fonce); }
-
-.bloc-retard {
-  background: #FEF3C7;
-  border-color: #FDE68A;
-  color: #92400E;
-  font-weight: 600;
-}
-.bloc-retard a { color: #92400E; font-weight: 800; }
 
 .bloc-telephone { margin-top: 16px; font-weight: 600; }
 .bloc-telephone .btn { margin-top: 10px; font-size: 17px; text-decoration: none; }
 
-.legende-carte { margin: -6px 2px 12px; }
+/* Carte plein ecran */
 
-/* Onglet Contact (page client) */
+#carte-client {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
 
-#cli-contact summary { cursor: pointer; margin-bottom: 0; }
-#cli-contact[open] summary { margin-bottom: 10px; }
+.barre-haut {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  background: rgba(15, 39, 64, .92);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .25);
+}
+
+/* Camion anime */
+
+.marqueur-camion {
+  width: 38px; height: 38px;
+  background: #fff;
+  border: 3px solid var(--orange);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .4);
+}
+
+/* Bandeau bas */
+
+.feuille {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1200;
+  margin: 0 auto;
+  max-width: 560px;
+  background: var(--carte);
+  border-radius: 22px 22px 0 0;
+  padding: 8px 18px calc(16px + env(safe-area-inset-bottom));
+  box-shadow: 0 -10px 34px rgba(0, 0, 0, .22);
+}
+
+.feuille-poignee {
+  width: 42px; height: 4px;
+  border-radius: 999px;
+  background: var(--bord);
+  margin: 4px auto 10px;
+}
+
+.feuille-statut {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.statut-icone {
+  flex-shrink: 0;
+  width: 46px; height: 46px;
+  background: var(--fond);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.statut-titre { font-weight: 800; font-size: 17px; line-height: 1.25; }
+.statut-sous { font-size: 13.5px; color: var(--texte-doux); margin-top: 2px; }
+
+.barre-progression {
+  height: 6px;
+  background: var(--bord);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.progression-remplie {
+  height: 100%;
+  width: 4%;
+  background: linear-gradient(90deg, var(--orange), var(--orange-fonce));
+  border-radius: 999px;
+  transition: width .8s ease;
+}
+
+.feuille-eta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  background: var(--fond);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.eta-libelle { font-size: 13px; color: var(--texte-doux); font-weight: 600; }
+.eta-heure { font-size: 24px; font-weight: 800; color: var(--orange-fonce); }
+
+.bloc-retard {
+  background: #FEF3C7;
+  border: 1px solid #FDE68A;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  color: #92400E;
+  font-weight: 600;
+  font-size: 14px;
+}
+.bloc-retard a { color: #92400E; font-weight: 800; }
+
+.feuille-boutons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.btn-clair {
+  background: var(--fond);
+  color: var(--bleu);
+  border: 1.5px solid var(--bord);
+}
+
+.panneau-feuille {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bord);
+}
 
 .contact-ligne {
   display: flex;

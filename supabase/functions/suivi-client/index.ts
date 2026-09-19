@@ -112,13 +112,22 @@ Deno.serve(async (req) => {
     .limit(1)
     .maybeSingle();
 
-  // Progression : combien d'arrets restants AVANT ce client, sans
-  // jamais reveler qui ils sont ni ou ils sont.
+  // Progression : combien d'arrets NON TERMINES (a_faire ou en_cours)
+  // avant ce client, sans jamais reveler qui ils sont ni ou ils sont.
   const { count } = await admin
     .from('interventions')
     .select('id', { count: 'exact', head: true })
     .eq('tournee_id', itv.tournee_id)
-    .eq('statut', 'a_faire')
+    .in('statut', ['a_faire', 'en_cours'])
+    .lt('ordre', itv.ordre);
+
+  // Total d'arrets avant ce client (faits compris) : sert uniquement
+  // a la barre de progression cote client. Un simple nombre, rien
+  // d'identifiant.
+  const { count: countTotal } = await admin
+    .from('interventions')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournee_id', itv.tournee_id)
     .lt('ordre', itv.ordre);
 
   // Les AUTRES arrets de la tournee, ANONYMISES au maximum :
@@ -146,10 +155,12 @@ Deno.serve(async (req) => {
   return json({
     etat: 'suivi',
     tournee_statut: tournee.statut,                 // preparee | en_cours
+    mon_statut: itv.statut,                         // a_faire | en_cours (arrive chez vous)
     nacelliste_nom: nacelliste?.nom ?? 'Le nacelliste',
     position: pos ? { lat: pos.lat, lng: pos.lng, captured_at: pos.captured_at } : null,
     eta: itv.eta,
     arrets_avant: count ?? 0,
+    arrets_avant_total: countTotal ?? 0,            // barre de progression
     destination: { lat: itv.lat, lng: itv.lng },    // l'adresse DU client lui-meme
     autres_arrets: autresArrets,                    // points anonymes (voir ci-dessus)
     infos_avant: itv.infos_avant || params?.infos_avant_defaut || '',

@@ -9,12 +9,17 @@ Trois faces :
   **itinéraire optimisé** (ordre + tracé routier + ETA) — une **proposition** qu'il peut
   **réordonner à la main** (flèches ▲▼ ou glisser-déposer, tracé et ETA recalculés dans son
   ordre, bouton « Ré-optimiser » pour revenir à l'auto) —, **démarre sa tournée** (partage GPS),
-  clique **« Terminé »** chez chaque client et lui donne son **lien de suivi**.
-- **Client** (lien unique, sans compte) : voit le nacelliste **en temps réel sur la carte**,
-  son **heure d'arrivée estimée**, la progression (« Il y a N arrêts avant vous »), les autres
-  arrêts de la tournée en **ronds gris anonymes** (coordonnées arrondies côté serveur, jamais
-  de nom ni d'adresse), un **onglet 📞 Contact** (nacelliste + responsable, cliquables) et les
-  infos utiles — puis « Intervention terminée ✅ » avec le numéro de contact.
+  suit chaque arrêt en **trois états** (« ▶️ Je commence » → `en_cours` → « ✅ Terminé »,
+  un seul arrêt en cours à la fois), peut **« ↩️ Revenir »** (rouvrir un arrêt : le lien client
+  est réactivé et le changement journalisé) et donne à chaque client son **lien de suivi**.
+- **Client** (lien unique, sans compte) : carte **plein écran** façon appli de livraison, avec
+  un **camion 🚚 animé** qui **glisse le long du tracé routier OSRM** vers chez lui (pas de
+  saut entre deux positions), le tracé nacelliste → client affiché, les autres arrêts en
+  **ronds gris anonymes** (coordonnées arrondies côté serveur, jamais de nom ni d'adresse).
+  En bandeau bas : statut clair (« En route vers vous », « en intervention avant vous »,
+  « arrivé »), **ETA** (« vers 14h30 »), « Il y a N arrêts avant vous », barre de progression,
+  **📞 Contact** (nacelliste + responsable, cliquables) — puis « Intervention terminée ✅ »
+  avec les numéros.
 
 **100 % gratuit** : JavaScript vanilla (aucun framework, aucun build), Supabase (Auth +
 PostgreSQL + RLS + Realtime), Leaflet + OpenStreetMap, itinéraires OSRM public, géocodage
@@ -27,8 +32,8 @@ Base Adresse Nationale, hébergement GitHub Pages. Aucun secret dans le front.
 ### 1. Créer le projet Supabase (dédié)
 
 1. <https://supabase.com> → **New project** (nom : `suivi-nacelle`, région Europe, plan Free).
-2. **SQL Editor** → coller et exécuter `supabase/migrations/nacelle_v1.sql`
-   puis `supabase/migrations/nacelle_v2.sql` (idempotents : ré-exécutables sans risque).
+2. **SQL Editor** → coller et exécuter `supabase/migrations/nacelle_v1.sql`,
+   puis `nacelle_v2.sql`, puis `nacelle_v3.sql` (idempotents : ré-exécutables sans risque).
 
 ### 2. Vérifier Realtime
 
@@ -105,6 +110,7 @@ const SUPABASE_ANON_KEY = 'eyJ...';   // clé anon/public UNIQUEMENT
 | Lien client | Token ≥ 48 caractères hex aléatoires générés **par la base** ; lecture **seule**, filtrée, via `suivi-client` ; ne renvoie jamais l'identité des autres interventions. |
 | Points anonymes | Les autres arrêts affichés au client sont anonymisés **côté serveur** : lat/lng arrondis à 3 décimales (~100 m) + statut, triés par latitude (l'ordre du tableau ne révèle pas l'ordre de passage) — ni nom, ni adresse, ni token, ni ETA, ni id. |
 | Expiration | « Terminé » → `token_actif = false` (page « terminé ✅ » + numéro) ; tournée terminée → **tous** les tokens désactivés (lien « expiré », aucune donnée). |
+| Retour arrière | « ↩️ Revenir » rouvre un arrêt : le trigger serveur réactive le token, et chaque changement de statut est journalisé dans `interventions_journal` (écrit uniquement par trigger, lisible par le propriétaire/l'admin). |
 | Vie privée GPS | Position captée **uniquement** pendant `en_cours`, bandeau « Suivi de position activé » visible, bouton pause, envoi toutes les ~25 s, purge automatique à 48 h. |
 
 ## Tests
