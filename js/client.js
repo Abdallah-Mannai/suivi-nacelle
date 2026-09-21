@@ -239,6 +239,12 @@
       icone.textContent = '🕓';
       titre.textContent = `${donnees.nacelliste_nom} prépare sa tournée`;
       sous.textContent = 'Le suivi en direct démarre avec la tournée.';
+    } else if (donnees.tournee_statut === 'terminee') {
+      // Arret non fait sur une tournee close : le lien reste valable,
+      // le suivi reprendra si la tournee redemarre.
+      icone.textContent = '🕓';
+      titre.textContent = 'Votre intervention est reprogrammée';
+      sous.textContent = 'La tournée du nacelliste est terminée pour le moment. Contactez-nous pour plus d’informations.';
     } else if (donnees.mon_statut === 'en_cours') {
       icone.textContent = '🔧';
       titre.textContent = 'Le nacelliste est arrivé';
@@ -262,8 +268,10 @@
     else pourcent = Math.round(100 * (total - n) / (total + 1));
     $('cli-progression-barre').style.width = `${Math.max(4, pourcent)}%`;
 
-    // ETA « vers 14h30 » (masquee quand il est deja la).
-    const etaVisible = donnees.mon_statut !== 'en_cours' && donnees.tournee_statut !== 'preparee';
+    // ETA « vers 14h30 » (masquee quand il est deja la, ou quand la
+    // tournee ne roule pas : preparee / terminee).
+    const etaVisible = donnees.mon_statut !== 'en_cours' &&
+      donnees.tournee_statut === 'en_cours';
     $('cli-eta-bloc').classList.toggle('hidden', !etaVisible);
     $('cli-eta').textContent = donnees.eta ? `vers ${heureFr(donnees.eta)}` : 'bientôt disponible';
 
@@ -350,7 +358,13 @@
 
     if (donnees.etat === 'suivi')        majSuivi(donnees);
     else if (donnees.etat === 'termine') majTermine(donnees);
-    else {
+    else if (donnees.etat === 'expire') {
+      // Token CONNU mais desactive : on affiche l'ecran « lien plus
+      // actif » mais on continue d'interroger — une reactivation
+      // (arret rouvert) fait revivre le suivi sans recharger.
+      montrer('cli-invalide');
+    } else {
+      // Token inconnu : lien reellement invalide, on arrete la.
       montrer('cli-invalide');
       if (timer) { clearInterval(timer); timer = null; }
     }

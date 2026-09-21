@@ -13,6 +13,11 @@ const NacellisteApp = (() => {
   // Re-calcul des ETA pendant la tournee : toutes les 3 min (on
   // menage le serveur OSRM public).
   const RECALCUL_ETA_MS = 3 * 60 * 1000;
+  // Duree maxi de la glisse du camion entre deux fixes GPS.
+  const GLISSE_MAX_MS = 8000;
+  // Apres une manipulation manuelle de la carte, on laisse la main
+  // au nacelliste pendant 30 s avant de re-suivre le camion.
+  const REPIT_MANUEL_MS = 30000;
 
   let profil = null;
   let tournee = null;
@@ -28,6 +33,12 @@ const NacellisteApp = (() => {
   let enPause = false;
   let dernierEnvoi = 0;
   let dernierePosition = null;
+  // Animation du camion (meme principe que la page client) :
+  let geometrieCourante = null;      // dernier trace OSRM affiche
+  let posAffichee = null;            // position (logique) du camion
+  let animationId = null;
+  let dernierFixA = 0;               // date du fixe GPS precedent
+  let derniereManipCarte = 0;        // derniere manipulation manuelle
   let timerEta = null;
   let recalculEnCours = false;
   let reordonnancementEnCours = false;
@@ -124,6 +135,13 @@ const NacellisteApp = (() => {
     }).addTo(carte);
     calquePoints = L.layerGroup().addTo(carte);
     calqueRoute = L.layerGroup().addTo(carte);
+
+    // Manipulation MANUELLE de la carte (glisser, molette, doigt) :
+    // on suspend le suivi automatique du camion quelque temps.
+    const noterManip = () => { derniereManipCarte = Date.now(); };
+    carte.on('dragstart', noterManip);
+    carte.getContainer().addEventListener('wheel', noterManip, { passive: true });
+    carte.getContainer().addEventListener('touchstart', noterManip, { passive: true });
   }
 
   function icone(numero, statut) {
@@ -152,23 +170,113 @@ const NacellisteApp = (() => {
     if (geometrie) {
       L.polyline(geometrie, { color: '#E8710A', weight: 5, opacity: 0.85 }).addTo(calqueRoute);
       geometrie.forEach((p) => bornes.push(p));
+      geometrieCourante = geometrie;   // sert de rail a la glisse du camion
     }
     if (dernierePosition) bornes.push([dernierePosition.lat, dernierePosition.lng]);
-    if (bornes.length) carte.fitBounds(bornes, { padding: [30, 30], maxZoom: 15 });
+
+    // Recadrage global : pas pendant que le nacelliste manipule la
+    // carte, ni en pleine tournee une fois le camion affiche (la, le
+    // suivi discret — suivreCamion — s'en charge).
+    const manipRecente = Date.now() - derniereManipCarte < REPIT_MANUEL_MS;
+    const suiviCamion = tournee.statut === 'en_cours' && posAffichee;
+    if (bornes.length && !manipRecente && !suiviCamion) {
+      carte.fitBounds(bornes, { padding: [30, 30], maxZoom: 15 });
+    }
+  }
+
+  // ---------- camion anime (meme rendu que la page client) ----------
+
+  // Sommet du trace le plus proche d'un point.
+  function plusProcheSurTrace(chemin, p) {
+    let index = 0;
+    let dist = Infinity;
+    for (let k = 0; k < chemin.length; k++) {
+      const d = haversine({ lat: chemin[k][0], lng: chemin[k][1] }, p);
+      if (d < dist) { dist = d; index = k; }
+    }
+    return { index, dist };
+  }
+
+  // Fait glisser le camion le long d'une suite de points, a vitesse
+  // constante, pendant dureeMs (pas de saut d'un fixe GPS a l'autre).
+  function glisserCamion(points, dureeMs) {
+    if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+    if (!marqueurMoi || points.length < 2) return;
+
+    const cumuls = [0];
+    for (let k = 1; k < points.length; k++) {
+      cumuls.push(cumuls[k - 1] + haversine(
+        { lat: points[k - 1][0], lng: points[k - 1][1] },
+        { lat: points[k][0], lng: points[k][1] }));
+    }
+    const total = cumuls[cumuls.length - 1];
+    if (total < 1) { marqueurMoi.setLatLng(points[points.length - 1]); return; }
+
+    const debut = performance.now();
+    const pas = (maintenant) => {
+      const fraction = Math.min((maintenant - debut) / dureeMs, 1);
+      const cible = fraction * total;
+      let k = 1;
+      while (k < cumuls.length - 1 && cumuls[k] < cible) k++;
+      const f = (cible - cumuls[k - 1]) / Math.max(cumuls[k] - cumuls[k - 1], 0.001);
+      marqueurMoi.setLatLng([
+        points[k - 1][0] + (points[k][0] - points[k - 1][0]) * f,
+        points[k - 1][1] + (points[k][1] - points[k - 1][1]) * f,
+      ]);
+      if (fraction < 1) animationId = requestAnimationFrame(pas);
+      else animationId = null;
+    };
+    animationId = requestAnimationFrame(pas);
+  }
+
+  // Suivi discret : on recentre sur le camion seulement s'il sort du
+  // cadre ET que le nacelliste n'a pas touche la carte recemment.
+  function suivreCamion(pos) {
+    if (tournee.statut !== 'en_cours') return;
+    if (Date.now() - derniereManipCarte < REPIT_MANUEL_MS) return;
+    const cadre = carte.getBounds().pad(-0.25);
+    if (!cadre.contains([pos.lat, pos.lng])) {
+      carte.panTo([pos.lat, pos.lng], { animate: true });
+    }
   }
 
   function rendreMaPosition() {
     if (!dernierePosition) return;
-    const pos = [dernierePosition.lat, dernierePosition.lng];
+    const cible = { lat: dernierePosition.lat, lng: dernierePosition.lng };
+    const maintenant = Date.now();
+    const depuisDernierFix = maintenant - dernierFixA;
+    dernierFixA = maintenant;
+
     if (!marqueurMoi) {
-      marqueurMoi = L.marker(pos, {
-        icon: L.divIcon({ className: '', html: '<div class="marqueur-moi">🚚</div>',
-                          iconSize: [34, 34], iconAnchor: [17, 17] }),
+      marqueurMoi = L.marker([cible.lat, cible.lng], {
+        icon: L.divIcon({ className: '', html: '<div class="marqueur-camion">🚚</div>',
+                          iconSize: [38, 38], iconAnchor: [19, 19] }),
         zIndexOffset: 1000,
       }).addTo(carte);
-    } else {
-      marqueurMoi.setLatLng(pos);
+      posAffichee = cible;
+      suivreCamion(cible);
+      return;
     }
+
+    if (haversine(posAffichee, cible) < 8) { posAffichee = cible; return; }
+
+    // Glisse le long du trace routier entre l'ancienne et la nouvelle
+    // position ; a defaut (hors trace), petite glisse directe.
+    let points = [[posAffichee.lat, posAffichee.lng], [cible.lat, cible.lng]];
+    if (geometrieCourante) {
+      const i = plusProcheSurTrace(geometrieCourante, posAffichee);
+      const j = plusProcheSurTrace(geometrieCourante, cible);
+      if (j.index > i.index && i.dist < 80 && j.dist < 80) {
+        points = [[posAffichee.lat, posAffichee.lng],
+                  ...geometrieCourante.slice(i.index + 1, j.index + 1)];
+      }
+    }
+    // La glisse dure au plus jusqu'au fixe GPS suivant (pour ne pas
+    // trainer derriere la realite).
+    const duree = Math.min(Math.max(depuisDernierFix, 1000), GLISSE_MAX_MS);
+    glisserCamion(points, duree);
+    posAffichee = cible;
+    suivreCamion(cible);
   }
 
   // ---------- rendu liste + boutons ----------
@@ -183,7 +291,9 @@ const NacellisteApp = (() => {
     badge.className = `badge badge-${tournee.statut}`;
 
     const terminee = tournee.statut === 'terminee';
-    $('nac-bloc-ajout').classList.toggle('hidden', terminee);
+    // Une intervention peut tomber a tout moment : l'ajout reste
+    // possible meme tournee terminee (elle sera alors rouverte).
+    $('nac-bloc-ajout').classList.remove('hidden');
     $('btn-optimiser').classList.toggle('hidden', terminee);
     $('btn-demarrer').classList.toggle('hidden', tournee.statut !== 'preparee');
     $('btn-pause').classList.toggle('hidden', tournee.statut !== 'en_cours');
@@ -304,7 +414,22 @@ const NacellisteApp = (() => {
 
       interventions.push(data);
       $('form-intervention').reset();
-      message(`Intervention ajoutée : ${adresse}`, 'ok');
+
+      // Ajout sur une tournee terminee : on la ROUVRE automatiquement
+      // (en_cours si le GPS tourne encore, sinon preparee — il faudra
+      // re-appuyer sur « Demarrer »). Le trigger serveur reactive les
+      // liens clients des arrets non faits.
+      if (tournee.statut === 'terminee') {
+        const nouveau = (watchId !== null) ? 'en_cours' : 'preparee';
+        const { data: rouverte, error: eTournee } = await sb.from('tournees')
+          .update({ statut: nouveau }).eq('id', tournee.id).select().single();
+        if (eTournee) throw new Error(eTournee.message);
+        tournee = rouverte;
+        if (tournee.statut === 'en_cours') activerSuivi();
+        message('Nouvelle intervention ajoutée — tournée rouverte.', 'ok');
+      } else {
+        message(`Intervention ajoutée : ${adresse}`, 'ok');
+      }
       rendre();
     } catch (err) {
       message(err.message, 'erreur');
@@ -667,7 +792,7 @@ const NacellisteApp = (() => {
     const avertissement = restantes
       ? `Il reste ${restantes} intervention(s) non faite(s).\n`
       : '';
-    if (!confirm(`${avertissement}Terminer la tournée ?\nLe suivi GPS s’arrête et TOUS les liens clients sont désactivés.`)) return;
+    if (!confirm(`${avertissement}Terminer la tournée ?\nLe suivi GPS s’arrête. Les liens des arrêts non faits restent valables.`)) return;
 
     const { data, error } = await sb.from('tournees')
       .update({ statut: 'terminee' }).eq('id', tournee.id).select().single();
@@ -675,9 +800,9 @@ const NacellisteApp = (() => {
     tournee = data;
 
     desactiverSuivi();
-    await chargerInterventions();   // token_actif mis a FALSE par le trigger
+    await chargerInterventions();
     rendre();
-    message('Tournée terminée. Suivi GPS arrêté, liens clients désactivés.', 'ok');
+    message('Tournée terminée. Suivi GPS arrêté — les liens des arrêts non faits restent actifs.', 'ok');
   }
 
   // ---------- lien client ----------

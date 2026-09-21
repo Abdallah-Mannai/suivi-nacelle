@@ -73,11 +73,7 @@ Deno.serve(async (req) => {
 
   const telephone = params?.telephone_contact ?? '0615324767';
 
-  // Tournee terminee = fin de journee : le lien est mort, on ne
-  // renvoie plus AUCUNE donnee (test n°6 du cahier des charges).
-  if (!tournee || tournee.statut === 'terminee') {
-    return json({ etat: 'expire' }, 410);
-  }
+  if (!tournee) return json({ etat: 'invalide' }, 404);
 
   // Le nacelliste de la tournee : prenom + telephone (onglet Contact).
   const { data: nacelliste } = await admin
@@ -89,6 +85,8 @@ Deno.serve(async (req) => {
   const telephoneNacelliste = nacelliste?.telephone || null;
 
   // Intervention faite : message « termine » + infos apres + numeros.
+  // TOUJOURS teste avant l'etat de la tournee : un arret fait affiche
+  // « termine », jamais « invalide », meme tournee terminee.
   if (itv.statut === 'faite') {
     return json({
       etat: 'termine',
@@ -99,8 +97,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Token desactive manuellement (sans etre « faite ») : lien mort.
+  // Token desactive (sans etre « faite ») : lien expire. Cas devenu
+  // rare depuis la v4 (la fin de tournee ne coupe plus ces tokens) ;
+  // la page client continue d'interroger, une reactivation reprend.
   if (!itv.token_actif) return json({ etat: 'expire' }, 410);
+
+  // NB : une tournee « terminee » n'invalide PAS le lien d'un arret
+  // non fait — le client voit un suivi en pause (tournee_statut).
 
   // --- Suivi live ---
   // Derniere position du nacelliste sur CETTE tournee (un seul point).
@@ -154,7 +157,7 @@ Deno.serve(async (req) => {
 
   return json({
     etat: 'suivi',
-    tournee_statut: tournee.statut,                 // preparee | en_cours
+    tournee_statut: tournee.statut,                 // preparee | en_cours | terminee
     mon_statut: itv.statut,                         // a_faire | en_cours (arrive chez vous)
     nacelliste_nom: nacelliste?.nom ?? 'Le nacelliste',
     position: pos ? { lat: pos.lat, lng: pos.lng, captured_at: pos.captured_at } : null,
