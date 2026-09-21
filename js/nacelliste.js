@@ -120,6 +120,7 @@ const NacellisteApp = (() => {
     const { data } = await sb
       .from('interventions').select('*')
       .eq('tournee_id', tournee.id)
+      .eq('supprimee', false)          // les supprimees restent en base (trace admin)
       .order('ordre', { ascending: true })
       .order('created_at', { ascending: true });
     interventions = data || [];
@@ -329,15 +330,17 @@ const NacellisteApp = (() => {
       const actions = fait ? `
             <span class="note">Terminée ✅ — lien client désactivé</span>
             <button class="btn btn-petit btn-lien act-revenir">↩️ Revenir</button>
+            <button class="btn btn-petit btn-lien act-supprimer">🗑️ Supprimer</button>
           ` : enCours ? `
             <button class="btn btn-petit btn-primary act-terminer">✅ Terminé</button>
             <button class="btn btn-petit btn-secondaire act-copier">🔗 Copier le lien client</button>
             <button class="btn btn-petit btn-lien act-revenir">↩️ Revenir</button>
+            <button class="btn btn-petit btn-lien act-supprimer">🗑️ Supprimer</button>
           ` : `
             <button class="btn btn-petit btn-primary act-commencer">▶️ Je commence</button>
             <button class="btn btn-petit btn-secondaire act-copier">🔗 Copier le lien client</button>
             <button class="btn btn-petit btn-secondaire act-terminer">✅ Terminé</button>
-            ${tournee.statut === 'preparee' ? '<button class="btn btn-petit btn-lien act-supprimer">Supprimer</button>' : ''}
+            <button class="btn btn-petit btn-lien act-supprimer">🗑️ Supprimer</button>
           `;
       return `
       <div class="carte-bloc intervention ${fait ? 'intervention-faite' : ''} ${enCours ? 'intervention-encours' : ''}" data-id="${itv.id}"
@@ -438,11 +441,19 @@ const NacellisteApp = (() => {
     }
   }
 
+  // Suppression DOUCE : jamais de vrai DELETE. L'intervention passe
+  // supprimee = TRUE (le trigger serveur horodate, note l'auteur et
+  // coupe le lien client) ; elle disparait de la liste, de la carte
+  // et des calculs, mais l'admin garde la trace et peut restaurer.
   async function supprimerIntervention(id) {
     if (!confirm('Supprimer cette intervention ?')) return;
-    await sb.from('interventions').delete().eq('id', id);
+    const { error } = await sb.from('interventions')
+      .update({ supprimee: true }).eq('id', id);
+    if (error) { message(error.message, 'erreur'); return; }
     interventions = interventions.filter((i) => i.id !== id);
     rendre();
+    recalculerEtas();   // itineraire + ETA recalcules sans cet arret
+    message('Intervention supprimée — l’admin en garde la trace et peut la restaurer.', 'ok');
   }
 
   // ---------- reordonnancement manuel ----------

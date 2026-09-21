@@ -82,13 +82,20 @@ const AdminApp = (() => {
 
     const { data: itvs } = await sb
       .from('interventions')
-      .select('id, tournee_id, ordre, client_nom, adresse, statut, eta, faite_at')
+      .select('id, tournee_id, ordre, client_nom, adresse, statut, eta, faite_at, supprimee, supprimee_at, supprimee_par')
       .in('tournee_id', tournees.map((t) => t.id))
       .order('ordre');
 
+    // Noms des auteurs de suppression (nacelliste ou admin).
+    const { data: profs } = await sb.from('profils').select('id, nom');
+    const nomDe = new Map((profs || []).map((p) => [p.id, p.nom]));
+
     const libelles = { preparee: 'préparée', en_cours: 'en cours', terminee: 'terminée' };
+    const libellesItv = { a_faire: 'à faire', en_cours: 'en cours', faite: 'faite' };
     conteneur.innerHTML = tournees.map((t) => {
-      const liste = (itvs || []).filter((i) => i.tournee_id === t.id);
+      const toutes = (itvs || []).filter((i) => i.tournee_id === t.id);
+      const liste = toutes.filter((i) => !i.supprimee);
+      const supprimees = toutes.filter((i) => i.supprimee);
       const faites = liste.filter((i) => i.statut === 'faite').length;
       nomsNacellistes.set(t.nacelliste_id, t.profils?.nom || '?');
       return `
@@ -108,8 +115,35 @@ const AdminApp = (() => {
             <span class="admin-itv-adresse">${echap(i.client_nom ? i.client_nom + ' — ' : '')}${echap(i.adresse)}</span>
             <span class="intervention-eta">${i.statut === 'faite' ? heure(i.faite_at) : (i.eta ? '≈ ' + heure(i.eta) : '')}</span>
           </div>`).join('')}
+        ${supprimees.length ? `
+        <details class="sous-details">
+          <summary>🗑️ ${supprimees.length} intervention${supprimees.length > 1 ? 's' : ''} supprimée${supprimees.length > 1 ? 's' : ''} (trace)</summary>
+          ${supprimees.map((i) => `
+          <div class="admin-itv intervention-faite" data-id="${i.id}">
+            <span class="pastille pastille-petite">🗑️</span>
+            <span class="admin-itv-adresse">${echap(i.client_nom ? i.client_nom + ' — ' : '')}${echap(i.adresse)}
+              <br><span class="note">était « ${libellesItv[i.statut] || i.statut} » — supprimée par
+              ${echap(nomDe.get(i.supprimee_par) || '?')} à ${heure(i.supprimee_at)}</span></span>
+            <button class="btn btn-petit btn-secondaire act-restaurer">↩️ Restaurer</button>
+          </div>`).join('')}
+        </details>` : ''}
       </div>`;
     }).join('');
+
+    conteneur.querySelectorAll('.act-restaurer').forEach((b) =>
+      b.addEventListener('click', (e) => restaurerIntervention(
+        e.target.closest('[data-id]').dataset.id)));
+  }
+
+  // Restauration (admin uniquement — verrouille par trigger serveur) :
+  // l'arret revient dans la liste du nacelliste, lien client reactive
+  // si l'arret n'est pas fait.
+  async function restaurerIntervention(id) {
+    if (!confirm('Restaurer cette intervention ?\nElle revient dans la tournée du nacelliste.')) return;
+    const { error } = await sb.from('interventions')
+      .update({ supprimee: false }).eq('id', id);
+    message(error ? error.message : 'Intervention restaurée.', error ? 'erreur' : 'ok');
+    chargerTournees();
   }
 
   // ---------- carte globale temps reel ----------

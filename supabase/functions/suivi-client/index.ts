@@ -53,11 +53,13 @@ Deno.serve(async (req) => {
 
   const { data: itv } = await admin
     .from('interventions')
-    .select('id, tournee_id, ordre, statut, faite_at, token_actif, eta, infos_avant, infos_apres, lat, lng')
+    .select('id, tournee_id, ordre, statut, faite_at, token_actif, eta, infos_avant, infos_apres, lat, lng, supprimee')
     .eq('token', token)
     .maybeSingle();
 
-  if (!itv) return json({ etat: 'invalide' }, 404);
+  // Intervention supprimee (soft delete) : traitee comme INEXISTANTE,
+  // on n'expose rien.
+  if (!itv || itv.supprimee) return json({ etat: 'invalide' }, 404);
 
   const { data: tournee } = await admin
     .from('tournees')
@@ -121,6 +123,7 @@ Deno.serve(async (req) => {
     .from('interventions')
     .select('id', { count: 'exact', head: true })
     .eq('tournee_id', itv.tournee_id)
+    .eq('supprimee', false)
     .in('statut', ['a_faire', 'en_cours'])
     .lt('ordre', itv.ordre);
 
@@ -131,6 +134,7 @@ Deno.serve(async (req) => {
     .from('interventions')
     .select('id', { count: 'exact', head: true })
     .eq('tournee_id', itv.tournee_id)
+    .eq('supprimee', false)
     .lt('ordre', itv.ordre);
 
   // Les AUTRES arrets de la tournee, ANONYMISES au maximum :
@@ -143,7 +147,8 @@ Deno.serve(async (req) => {
   const { data: autres } = await admin
     .from('interventions')
     .select('id, lat, lng, statut')
-    .eq('tournee_id', itv.tournee_id);
+    .eq('tournee_id', itv.tournee_id)
+    .eq('supprimee', false);
 
   const arrondi = (x: number) => Math.round(x * 1000) / 1000;
   const autresArrets = (autres ?? [])

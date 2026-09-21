@@ -33,8 +33,8 @@ Base Adresse Nationale, hébergement GitHub Pages. Aucun secret dans le front.
 
 1. <https://supabase.com> → **New project** (nom : `suivi-nacelle`, région Europe, plan Free).
 2. **SQL Editor** → coller et exécuter `supabase/migrations/nacelle_v1.sql`,
-   puis `nacelle_v2.sql`, `nacelle_v3.sql` et `nacelle_v4.sql`
-   (idempotents : ré-exécutables sans risque).
+   puis `nacelle_v2.sql`, `nacelle_v3.sql`, `nacelle_v4.sql` et `nacelle_v5.sql`,
+   dans cet ordre (idempotents : ré-exécutables sans risque).
 
 ### 2. Vérifier Realtime
 
@@ -112,6 +112,7 @@ const SUPABASE_ANON_KEY = 'eyJ...';   // clé anon/public UNIQUEMENT
 | Points anonymes | Les autres arrêts affichés au client sont anonymisés **côté serveur** : lat/lng arrondis à 3 décimales (~100 m) + statut, triés par latitude (l'ordre du tableau ne révèle pas l'ordre de passage) — ni nom, ni adresse, ni token, ni ETA, ni id. |
 | Expiration | Le lien d'un arrêt reste **actif tant que l'arrêt n'est pas « faite »**. « Terminé » → `token_actif = false` (page « terminé ✅ » + numéros, jamais « invalide ») ; la fin de tournée ne coupe **pas** les liens des arrêts non faits (le client voit « tournée terminée pour le moment »). |
 | Retour arrière | « ↩️ Revenir » rouvre un arrêt : le trigger serveur réactive le token, et chaque changement de statut est journalisé dans `interventions_journal` (écrit uniquement par trigger, lisible par le propriétaire/l'admin). |
+| Suppression douce | « 🗑️ Supprimer » côté nacelliste ne fait **jamais** de DELETE : `supprimee = true` (trigger serveur : horodatage, auteur, lien client coupé, journal `supprimee`/`restauree`). L'arrêt est traité comme inexistant par `suivi-client`. L'admin voit la trace (qui, quand, statut) et est **seul** à pouvoir restaurer (verrou par trigger). |
 | Vie privée GPS | Position captée **uniquement** pendant `en_cours`, bandeau « Suivi de position activé » visible, bouton pause, envoi toutes les ~25 s, purge automatique à 48 h. |
 
 ## Tests

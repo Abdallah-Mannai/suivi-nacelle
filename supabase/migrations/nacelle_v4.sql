@@ -52,6 +52,18 @@ END; $fn$;
 -- Tout token inactif d'un arret non fait vient donc de l'ancien
 -- comportement : on le reactive.
 
-UPDATE interventions
-   SET token_actif = TRUE
- WHERE statut <> 'faite' AND NOT token_actif;
+-- (re-execution apres la v5 : on ne reactive jamais un arret
+--  supprime — la colonne « supprimee » n'existe pas encore lors
+--  d'une premiere execution, d'ou le test dynamique)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'interventions'
+               AND column_name = 'supprimee') THEN
+    UPDATE interventions SET token_actif = TRUE
+     WHERE statut <> 'faite' AND NOT token_actif AND NOT supprimee;
+  ELSE
+    UPDATE interventions SET token_actif = TRUE
+     WHERE statut <> 'faite' AND NOT token_actif;
+  END IF;
+END $$;
