@@ -53,7 +53,8 @@ BEGIN
     SELECT p.id FROM profils p
     WHERE p.role = 'nacelliste'
       AND NOT EXISTS (
-        SELECT 1 FROM tournees t WHERE t.nacelliste_id = p.id AND t.permanente)
+        SELECT 1 FROM tournees t
+         WHERE t.nacelliste_id = p.id AND t.permanente = TRUE)
   LOOP
     UPDATE tournees SET permanente = TRUE
      WHERE id = (SELECT id FROM tournees
@@ -77,11 +78,11 @@ END $$;
 
 UPDATE interventions i
    SET tournee_id = tp.id
-  FROM tournees ta
-  JOIN tournees tp
-    ON tp.nacelliste_id = ta.nacelliste_id AND tp.permanente
+  FROM tournees ta, tournees tp
  WHERE i.tournee_id = ta.id
-   AND NOT ta.permanente;
+   AND ta.permanente = FALSE
+   AND tp.nacelliste_id = ta.nacelliste_id
+   AND tp.permanente = TRUE;
 
 -- Renumerotation propre apres fusion (plusieurs tournees pouvaient
 -- utiliser les memes numeros) : les « faite » gardent le debut
@@ -96,8 +97,10 @@ WITH nouvelle AS (
                     i.ordre, i.created_at
          ) AS n
     FROM interventions i
-    JOIN tournees t ON t.id = i.tournee_id AND t.permanente
-   WHERE NOT i.supprimee
+    JOIN tournees t
+      ON t.id = i.tournee_id
+   WHERE t.permanente = TRUE
+     AND i.supprimee = FALSE
 )
 UPDATE interventions SET ordre = nouvelle.n
   FROM nouvelle WHERE interventions.id = nouvelle.id;
@@ -111,4 +114,17 @@ UPDATE interventions SET ordre = nouvelle.n
 -- passage les liens clients des arrets non faits et non supprimes.
 
 UPDATE tournees SET statut = 'preparee'
- WHERE permanente AND statut = 'terminee';
+ WHERE permanente = TRUE AND statut = 'terminee';
+
+-- Et dans tous les cas (meme si la liste promue n'etait pas
+-- « terminee ») : les liens clients des arrets NON faits et NON
+-- supprimes, coupes par une ancienne fin de tournee, sont reactives.
+-- Meme reparation que la v4, appliquee a la liste continue.
+UPDATE interventions i
+   SET token_actif = TRUE
+  FROM tournees t
+ WHERE t.id = i.tournee_id
+   AND t.permanente = TRUE
+   AND i.statut <> 'faite'
+   AND i.supprimee = FALSE
+   AND i.token_actif = FALSE;
