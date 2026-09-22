@@ -3,15 +3,21 @@
 Suivi de tournée d'un **nacelliste** qui passe chez des clients après le technicien fibre.
 Trois faces :
 
-- **Admin** : crée les comptes nacellistes, voit les tournées du jour, une carte globale en
-  direct, et règle les paramètres (temps d'intervention moyen, textes, téléphone de contact).
-- **Nacelliste** (mobile) : saisit ses interventions du jour (adresse ou `lat;lng`), obtient un
-  **itinéraire optimisé** (ordre + tracé routier + ETA) — une **proposition** qu'il peut
-  **réordonner à la main** (flèches ▲▼ ou glisser-déposer, tracé et ETA recalculés dans son
-  ordre, bouton « Ré-optimiser » pour revenir à l'auto) —, **démarre sa tournée** (partage GPS),
+- **Admin** : crée les comptes nacellistes, voit la **liste continue** de chaque nacelliste
+  (avec la trace des suppressions), une carte globale en direct, et règle les paramètres
+  (temps d'intervention moyen, textes, téléphone de contact).
+- **Nacelliste** (mobile) : gère **UNE liste continue** d'interventions — **sans notion de
+  jour** : ce qu'il saisit (le soir pour le lendemain, ou à tout moment) **reste dans sa liste**
+  tant que ce n'est pas fait ou supprimé, rien ne se vide au changement de date. Il saisit ses
+  interventions (adresse ou `lat;lng`), obtient un **itinéraire optimisé** (ordre + tracé
+  routier + ETA) — une **proposition** qu'il peut **réordonner à la main** (flèches ▲▼ ou
+  glisser-déposer, tracé et ETA recalculés dans son ordre, bouton « Ré-optimiser » pour revenir
+  à l'auto) —, passe **« En tournée »** (partage GPS, arrêtable à tout moment sans toucher à la
+  liste),
   suit chaque arrêt en **trois états** (« ▶️ Je commence » → `en_cours` → « ✅ Terminé »,
   un seul arrêt en cours à la fois), peut **« ↩️ Revenir »** (rouvrir un arrêt : le lien client
   est réactivé et le changement journalisé) et donne à chaque client son **lien de suivi**.
+  Les interventions **faites** restent consultables dans une section « faites » repliée.
 - **Client** (lien unique, sans compte) : carte **plein écran** façon appli de livraison, avec
   un **camion 🚚 animé** qui **glisse le long du tracé routier OSRM** vers chez lui (pas de
   saut entre deux positions), le tracé nacelliste → client affiché, les autres arrêts en
@@ -33,8 +39,10 @@ Base Adresse Nationale, hébergement GitHub Pages. Aucun secret dans le front.
 
 1. <https://supabase.com> → **New project** (nom : `suivi-nacelle`, région Europe, plan Free).
 2. **SQL Editor** → coller et exécuter `supabase/migrations/nacelle_v1.sql`,
-   puis `nacelle_v2.sql`, `nacelle_v3.sql`, `nacelle_v4.sql` et `nacelle_v5.sql`,
-   dans cet ordre (idempotents : ré-exécutables sans risque).
+   puis `nacelle_v2.sql`, `nacelle_v3.sql`, `nacelle_v4.sql`, `nacelle_v5.sql`
+   et `nacelle_v6.sql`, dans cet ordre (idempotents : ré-exécutables sans risque).
+   La v6 instaure la **liste continue** (fin de la tournée par jour) et **rapatrie**
+   les interventions des anciennes tournées datées — rien n'est perdu.
 
 ### 2. Vérifier Realtime
 
@@ -94,8 +102,8 @@ const SUPABASE_ANON_KEY = 'eyJ...';   // clé anon/public UNIQUEMENT
 ### 7. Premiers pas
 
 1. Se connecter en `admin` → onglet **Comptes** → créer Hamda, Lheoui, Klach, Zitouni.
-2. Le nacelliste se connecte sur son téléphone → ajoute ses interventions →
-   **Optimiser l'itinéraire** → **Démarrer la tournée** (autoriser le GPS).
+2. Le nacelliste se connecte sur son téléphone → ajoute ses interventions (quand il veut :
+   elles restent dans sa liste) → **Ré-optimiser** → **En tournée** (autoriser le GPS).
 3. Chez chaque client : **🔗 Copier le lien client** (à donner sur place), puis **✅ Terminé**
    en repartant.
 
@@ -110,7 +118,7 @@ const SUPABASE_ANON_KEY = 'eyJ...';   // clé anon/public UNIQUEMENT
 | RLS | Stricte sur toutes les tables : un nacelliste ne voit que **ses** tournées/interventions/positions ; `positions` n'est inscriptible que par son propriétaire. |
 | Lien client | Token ≥ 48 caractères hex aléatoires générés **par la base** ; lecture **seule**, filtrée, via `suivi-client` ; ne renvoie jamais l'identité des autres interventions. |
 | Points anonymes | Les autres arrêts affichés au client sont anonymisés **côté serveur** : lat/lng arrondis à 3 décimales (~100 m) + statut, triés par latitude (l'ordre du tableau ne révèle pas l'ordre de passage) — ni nom, ni adresse, ni token, ni ETA, ni id. |
-| Expiration | Le lien d'un arrêt reste **actif tant que l'arrêt n'est pas « faite »**. « Terminé » → `token_actif = false` (page « terminé ✅ » + numéros, jamais « invalide ») ; la fin de tournée ne coupe **pas** les liens des arrêts non faits (le client voit « tournée terminée pour le moment »). |
+| Expiration | Le lien d'un arrêt reste **actif tant que l'arrêt n'est pas « faite »** (ou supprimé). « Terminé » → `token_actif = false` (page « terminé ✅ » + numéros, jamais « invalide ») ; arrêter le partage GPS ne coupe **aucun** lien. |
 | Retour arrière | « ↩️ Revenir » rouvre un arrêt : le trigger serveur réactive le token, et chaque changement de statut est journalisé dans `interventions_journal` (écrit uniquement par trigger, lisible par le propriétaire/l'admin). |
 | Suppression douce | « 🗑️ Supprimer » côté nacelliste ne fait **jamais** de DELETE : `supprimee = true` (trigger serveur : horodatage, auteur, lien client coupé, journal `supprimee`/`restauree`). L'arrêt est traité comme inexistant par `suivi-client`. L'admin voit la trace (qui, quand, statut) et est **seul** à pouvoir restaurer (verrou par trigger). |
 | Vie privée GPS | Position captée **uniquement** pendant `en_cours`, bandeau « Suivi de position activé » visible, bouton pause, envoi toutes les ~25 s, purge automatique à 48 h. |

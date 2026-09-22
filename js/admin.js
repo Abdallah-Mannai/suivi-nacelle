@@ -1,7 +1,8 @@
 // ============================================================
 // admin.js — ecran admin : comptes nacellistes (via l'Edge
-// Function « admin-comptes »), tournees du jour, carte globale
-// temps reel, parametres.
+// Function « admin-comptes »), liste continue de chaque
+// nacelliste (plus de tournee par jour), carte globale temps
+// reel, parametres.
 // ============================================================
 
 const AdminApp = (() => {
@@ -19,10 +20,6 @@ const AdminApp = (() => {
     const div = document.createElement('div');
     div.textContent = String(texte ?? '');
     return div.innerHTML;
-  }
-
-  function dateDuJour() {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' });
   }
 
   function heure(dateIso) {
@@ -64,19 +61,21 @@ const AdminApp = (() => {
     if (nom === 'tournees') chargerTournees();
   }
 
-  // ---------- tournees du jour ----------
+  // ---------- listes continues des nacellistes ----------
+  // Une liste PERMANENTE par nacelliste (plus de tournee par date) :
+  // l'admin voit tout ce qui reste a faire, les faites et la trace
+  // des suppressions, quel que soit le jour ou tout a ete saisi.
 
   async function chargerTournees() {
-    const jour = dateDuJour();
     const { data: tournees } = await sb
       .from('tournees')
-      .select('id, statut, demarree_at, terminee_at, nacelliste_id, profils(nom)')
-      .eq('date', jour)
+      .select('id, statut, nacelliste_id, profils(nom)')
+      .eq('permanente', true)
       .order('created_at');
 
     const conteneur = $('admin-tournees');
     if (!tournees || !tournees.length) {
-      conteneur.innerHTML = '<p class="centre note">Aucune tournée aujourd’hui.</p>';
+      conteneur.innerHTML = '<p class="centre note">Aucune liste d’interventions pour l’instant.</p>';
       return;
     }
 
@@ -90,7 +89,7 @@ const AdminApp = (() => {
     const { data: profs } = await sb.from('profils').select('id, nom');
     const nomDe = new Map((profs || []).map((p) => [p.id, p.nom]));
 
-    const libelles = { preparee: 'préparée', en_cours: 'en cours', terminee: 'terminée' };
+    const libelles = { preparee: 'GPS arrêté', en_cours: 'en tournée', terminee: 'GPS arrêté' };
     const libellesItv = { a_faire: 'à faire', en_cours: 'en cours', faite: 'faite' };
     conteneur.innerHTML = tournees.map((t) => {
       const toutes = (itvs || []).filter((i) => i.tournee_id === t.id);
@@ -103,9 +102,7 @@ const AdminApp = (() => {
         <div class="intervention-entete">
           <div class="intervention-infos">
             <div class="intervention-nom">🚚 ${echap(t.profils?.nom || '?')}</div>
-            <div class="note">${faites}/${liste.length} interventions faites
-              ${t.demarree_at ? ` — départ ${heure(t.demarree_at)}` : ''}
-              ${t.terminee_at ? ` — fin ${heure(t.terminee_at)}` : ''}</div>
+            <div class="note">${faites}/${liste.length} interventions faites</div>
           </div>
           <span class="badge badge-${t.statut}">${libelles[t.statut]}</span>
         </div>
@@ -139,7 +136,7 @@ const AdminApp = (() => {
   // l'arret revient dans la liste du nacelliste, lien client reactive
   // si l'arret n'est pas fait.
   async function restaurerIntervention(id) {
-    if (!confirm('Restaurer cette intervention ?\nElle revient dans la tournée du nacelliste.')) return;
+    if (!confirm('Restaurer cette intervention ?\nElle revient dans la liste du nacelliste.')) return;
     const { error } = await sb.from('interventions')
       .update({ supprimee: false }).eq('id', id);
     message(error ? error.message : 'Intervention restaurée.', error ? 'erreur' : 'ok');

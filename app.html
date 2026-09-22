@@ -28,8 +28,8 @@
 
     <div class="carte-bloc entete-tournee">
       <div>
-        <div class="tournee-date" id="nac-date"></div>
-        <div class="badge" id="nac-statut">préparée</div>
+        <div class="tournee-date" id="nac-date">Mes interventions</div>
+        <div class="badge" id="nac-statut">GPS arrêté</div>
       </div>
       <div id="nac-suivi-actif" class="suivi-actif hidden">
         <span class="point-vert"></span> Suivi de position activé
@@ -66,12 +66,12 @@
       </form>
     </details>
 
-    <!-- Actions tournee -->
+    <!-- Actions : partage GPS (ne touche jamais a la liste) -->
     <div class="actions-tournee">
       <button id="btn-optimiser" class="btn btn-secondaire">🧭 Ré-optimiser (auto)</button>
-      <button id="btn-demarrer"  class="btn btn-primary">▶️ Démarrer la tournée</button>
+      <button id="btn-demarrer"  class="btn btn-primary">▶️ En tournée (partager ma position)</button>
       <button id="btn-pause"     class="btn btn-secondaire hidden">⏸️ Pause GPS</button>
-      <button id="btn-terminer-tournee" class="btn btn-danger hidden">⏹️ Terminer la tournée</button>
+      <button id="btn-terminer-tournee" class="btn btn-secondaire hidden">⏹️ Arrêter le partage GPS</button>
     </div>
 
     <div id="carte-nacelliste" class="carte-leaflet"></div>
@@ -83,7 +83,7 @@
   <main id="vue-admin" class="conteneur hidden">
 
     <nav class="onglets">
-      <button class="onglet actif" data-onglet="tournees">Tournées</button>
+      <button class="onglet actif" data-onglet="tournees">Interventions</button>
       <button class="onglet" data-onglet="carte">Carte</button>
       <button class="onglet" data-onglet="comptes">Comptes</button>
       <button class="onglet" data-onglet="parametres">Paramètres</button>
@@ -91,14 +91,14 @@
 
     <div id="admin-message" class="msg hidden"></div>
 
-    <!-- Tournees du jour -->
+    <!-- Liste continue de chaque nacelliste -->
     <section id="onglet-tournees" class="panneau">
       <div id="admin-tournees"><p class="centre">Chargement…</p></div>
     </section>
 
     <!-- Carte globale temps reel -->
     <section id="onglet-carte" class="panneau hidden">
-      <p class="note">Position en direct des nacellistes en tournée aujourd’hui.</p>
+      <p class="note">Position en direct des nacellistes en tournée.</p>
       <div id="carte-admin" class="carte-leaflet carte-haute"></div>
     </section>
 
@@ -168,8 +168,8 @@
   <script src="js/supabase-config.js?v=1"></script>
   <script src="js/geo.js?v=1"></script>
   <script src="js/itineraire.js?v=1"></script>
-  <script src="js/nacelliste.js?v=5"></script>
-  <script src="js/admin.js?v=4"></script>
+  <script src="js/nacelliste.js?v=6"></script>
+  <script src="js/admin.js?v=5"></script>
   <script src="js/app.js?v=1"></script>
 </body>
 </html>

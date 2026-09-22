@@ -1,9 +1,10 @@
 // ============================================================
 // nacelliste.js — ecran mobile du nacelliste :
-// sa tournee du jour, ajout d'interventions (adresse BAN ou
-// « lat;lng »), optimisation de l'itineraire (OSRM), demarrage de
-// la tournee avec partage de position, boutons « Termine » et
-// « Copier le lien client ».
+// sa LISTE CONTINUE d'interventions (une seule liste, sans date :
+// rien ne se vide au changement de jour), ajout d'interventions
+// (adresse BAN ou « lat;lng »), optimisation de l'itineraire
+// (OSRM), partage de position (« En tournee / Arreter »), boutons
+// « Termine » et « Copier le lien client ».
 // ============================================================
 
 const NacellisteApp = (() => {
@@ -54,11 +55,6 @@ const NacellisteApp = (() => {
     return div.innerHTML;
   }
 
-  // Date du jour en France, au format YYYY-MM-DD (colonne tournees.date).
-  function dateDuJour() {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' });
-  }
-
   function heure(dateIso) {
     if (!dateIso) return '—';
     return new Date(dateIso).toLocaleTimeString('fr-FR',
@@ -91,28 +87,40 @@ const NacellisteApp = (() => {
     if (tournee.statut === 'en_cours') activerSuivi();
   }
 
+  // La liste continue : UNE tournee « permanente » par nacelliste.
+  // Plus de tournee par date — les interventions restent la, quel
+  // que soit le jour, tant qu'elles ne sont pas faites/supprimees.
   async function chargerTournee() {
-    const jour = dateDuJour();
     const { data: existante } = await sb
       .from('tournees').select('*')
-      .eq('nacelliste_id', profil.id).eq('date', jour)
+      .eq('nacelliste_id', profil.id).eq('permanente', true)
       .maybeSingle();
 
-    if (existante) { tournee = existante; return; }
-
-    const { data: creee, error } = await sb
-      .from('tournees')
-      .insert({ nacelliste_id: profil.id, date: jour })
-      .select().single();
-
-    if (error) {
-      // Course avec un autre onglet : l'index unique a gagne, on relit.
-      const { data: relue } = await sb
-        .from('tournees').select('*')
-        .eq('nacelliste_id', profil.id).eq('date', jour).maybeSingle();
-      tournee = relue;
+    if (existante) {
+      tournee = existante;
     } else {
-      tournee = creee;
+      const { data: creee, error } = await sb
+        .from('tournees')
+        .insert({ nacelliste_id: profil.id, permanente: true })
+        .select().single();
+
+      if (error) {
+        // Course avec un autre onglet : l'index unique a gagne, on relit.
+        const { data: relue } = await sb
+          .from('tournees').select('*')
+          .eq('nacelliste_id', profil.id).eq('permanente', true).maybeSingle();
+        tournee = relue;
+      } else {
+        tournee = creee;
+      }
+    }
+
+    // Reliquat d'une ancienne cloture quotidienne : la liste repasse
+    // en attente (le trigger serveur reactive les liens non faits).
+    if (tournee && tournee.statut === 'terminee') {
+      const { data: rouverte } = await sb.from('tournees')
+        .update({ statut: 'preparee' }).eq('id', tournee.id).select().single();
+      if (rouverte) tournee = rouverte;
     }
   }
 
@@ -283,45 +291,43 @@ const NacellisteApp = (() => {
   // ---------- rendu liste + boutons ----------
 
   function rendre() {
-    $('nac-date').textContent = new Date().toLocaleDateString('fr-FR',
-      { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
-
+    // Le badge ne suit plus la journee mais le PARTAGE GPS : la
+    // liste, elle, ne se vide et ne se verrouille jamais.
+    const enTournee = tournee.statut === 'en_cours';
     const badge = $('nac-statut');
-    const libelles = { preparee: 'préparée', en_cours: 'en cours', terminee: 'terminée' };
-    badge.textContent = libelles[tournee.statut];
-    badge.className = `badge badge-${tournee.statut}`;
+    badge.textContent = enTournee ? 'en tournée — GPS actif' : 'GPS arrêté';
+    badge.className = `badge badge-${enTournee ? 'en_cours' : 'preparee'}`;
 
-    const terminee = tournee.statut === 'terminee';
-    // Une intervention peut tomber a tout moment : l'ajout reste
-    // possible meme tournee terminee (elle sera alors rouverte).
-    $('nac-bloc-ajout').classList.remove('hidden');
-    $('btn-optimiser').classList.toggle('hidden', terminee);
-    $('btn-demarrer').classList.toggle('hidden', tournee.statut !== 'preparee');
-    $('btn-pause').classList.toggle('hidden', tournee.statut !== 'en_cours');
-    $('btn-terminer-tournee').classList.toggle('hidden', tournee.statut !== 'en_cours');
+    $('btn-demarrer').classList.toggle('hidden', enTournee);
+    $('btn-pause').classList.toggle('hidden', !enTournee);
+    $('btn-terminer-tournee').classList.toggle('hidden', !enTournee);
 
     const conteneur = $('liste-interventions');
     if (!interventions.length) {
-      conteneur.innerHTML = '<p class="centre note">Aucune intervention pour l’instant.<br>Ajoutez vos clients du jour ci-dessus.</p>';
+      conteneur.innerHTML = '<p class="centre note">Aucune intervention — ajoutez-en une ci-dessus.<br>Elle restera dans votre liste jusqu’à ce qu’elle soit faite.</p>';
       rendreCarte(null);
       return;
     }
 
-    const tri = interventions.slice().sort((a, b) => (a.ordre - b.ordre));
-    const restantesTriees = tri.filter((i) => i.statut !== 'faite');
-    const reordonnable = !terminee && restantesTriees.length > 1;
+    const restantesTriees = restantesDansLOrdre();   // l'« en cours » en tete
+    const faitesTriees = interventions.filter((i) => i.statut === 'faite')
+      .sort((a, b) => new Date(b.faite_at || 0) - new Date(a.faite_at || 0));
+    // L'arret « en cours » est epingle en tete : seuls les « a
+    // faire » se reordonnent (et il en faut au moins deux).
+    const premierDeplacable = restantesTriees.findIndex((i) => i.statut === 'a_faire');
+    const reordonnable = restantesTriees.filter((i) => i.statut === 'a_faire').length > 1;
 
     const entete = reordonnable
       ? '<p class="note note-reordonner">✋ Glissez-déposez une carte ou utilisez ▲▼ pour changer l’ordre de passage — le trajet et les ETA se recalculent.</p>'
       : '';
 
-    conteneur.innerHTML = entete + tri.map((itv) => {
+    const carteItv = (itv) => {
       const fait = itv.statut === 'faite';
       const enCours = itv.statut === 'en_cours';
       const posRestante = restantesTriees.findIndex((i) => i.id === itv.id);
-      const fleches = (!fait && reordonnable) ? `
+      const fleches = (!fait && !enCours && reordonnable) ? `
           <div class="reordonner">
-            <button class="btn-fleche act-monter" title="Monter" ${posRestante === 0 ? 'disabled' : ''}>▲</button>
+            <button class="btn-fleche act-monter" title="Monter" ${posRestante <= premierDeplacable ? 'disabled' : ''}>▲</button>
             <button class="btn-fleche act-descendre" title="Descendre" ${posRestante === restantesTriees.length - 1 ? 'disabled' : ''}>▼</button>
           </div>` : '';
       const pastille = fait ? '✓' : (enCours ? '▶' : (itv.ordre || '•'));
@@ -344,7 +350,7 @@ const NacellisteApp = (() => {
           `;
       return `
       <div class="carte-bloc intervention ${fait ? 'intervention-faite' : ''} ${enCours ? 'intervention-encours' : ''}" data-id="${itv.id}"
-           ${(!fait && reordonnable) ? 'draggable="true"' : ''}>
+           ${(!fait && !enCours && reordonnable) ? 'draggable="true"' : ''}>
         <div class="intervention-entete">
           <span class="pastille ${fait ? 'pastille-faite' : ''} ${enCours ? 'pastille-encours' : ''}">${pastille}</span>
           <div class="intervention-infos">
@@ -356,7 +362,20 @@ const NacellisteApp = (() => {
         </div>
         <div class="intervention-actions">${actions}</div>
       </div>`;
-    }).join('');
+    };
+
+    // Liste de travail (a faire + en cours) puis, repliees, les
+    // « faites » : consultables, mais hors du chemin de travail.
+    const blocAFaire = restantesTriees.length
+      ? entete + restantesTriees.map(carteItv).join('')
+      : '<p class="centre note">Aucune intervention à faire — ajoutez-en une ci-dessus.</p>';
+    const s = faitesTriees.length > 1 ? 's' : '';
+    const blocFaites = faitesTriees.length ? `
+      <details class="sous-details">
+        <summary>✅ ${faitesTriees.length} intervention${s} faite${s} (historique)</summary>
+        ${faitesTriees.map(carteItv).join('')}
+      </details>` : '';
+    conteneur.innerHTML = blocAFaire + blocFaites;
 
     conteneur.querySelectorAll('.act-copier').forEach((b) =>
       b.addEventListener('click', (e) => copierLien(idDe(e))));
@@ -418,21 +437,10 @@ const NacellisteApp = (() => {
       interventions.push(data);
       $('form-intervention').reset();
 
-      // Ajout sur une tournee terminee : on la ROUVRE automatiquement
-      // (en_cours si le GPS tourne encore, sinon preparee — il faudra
-      // re-appuyer sur « Demarrer »). Le trigger serveur reactive les
-      // liens clients des arrets non faits.
-      if (tournee.statut === 'terminee') {
-        const nouveau = (watchId !== null) ? 'en_cours' : 'preparee';
-        const { data: rouverte, error: eTournee } = await sb.from('tournees')
-          .update({ statut: nouveau }).eq('id', tournee.id).select().single();
-        if (eTournee) throw new Error(eTournee.message);
-        tournee = rouverte;
-        if (tournee.statut === 'en_cours') activerSuivi();
-        message('Nouvelle intervention ajoutée — tournée rouverte.', 'ok');
-      } else {
-        message(`Intervention ajoutée : ${adresse}`, 'ok');
-      }
+      // L'ajout est possible a TOUT moment (le soir pour le
+      // lendemain, en pleine tournee...) : l'intervention reste dans
+      // la liste tant qu'elle n'est pas faite ou supprimee.
+      message(`Intervention ajoutée : ${adresse}`, 'ok');
       rendre();
     } catch (err) {
       message(err.message, 'erreur');
@@ -462,18 +470,18 @@ const NacellisteApp = (() => {
   // On sauve le nouvel ordre, puis on recalcule le trace routier et
   // les ETA dans CET ordre — sans jamais re-optimiser dans son dos.
 
-  // Arrets non termines (a_faire + en_cours) dans l'ordre affiche.
+  // Arrets non termines (a_faire + en_cours) dans l'ordre affiche :
+  // l'arret « en cours » passe en tete (c'est la que le nacelliste
+  // se trouve), le reste suit l'ordre choisi.
   function restantesDansLOrdre() {
-    return interventions.filter((i) => i.statut !== 'faite')
-      .sort((a, b) => a.ordre - b.ordre);
-  }
-
-  // Meme liste, mais pour la ROUTE et les ETA : l'arret « en cours »
-  // passe devant (c'est la que le nacelliste se trouve).
-  function restantesPourRoute() {
     return interventions.filter((i) => i.statut !== 'faite')
       .sort((a, b) =>
         ((b.statut === 'en_cours') - (a.statut === 'en_cours')) || (a.ordre - b.ordre));
+  }
+
+  // Meme liste pour la ROUTE et les ETA (memes regles d'ordre).
+  function restantesPourRoute() {
+    return restantesDansLOrdre();
   }
 
   // Deplace une intervention « a faire » d'un cran (fleches ▲▼).
@@ -670,7 +678,10 @@ const NacellisteApp = (() => {
     }
   }
 
-  // ---------- tournee : demarrer / pause / terminer ----------
+  // ---------- partage GPS : en tournee / pause / arreter ----------
+  // Le statut de la tournee permanente ne suit QUE le partage GPS
+  // (preparee = arrete, en_cours = en tournee) : demarrer ou arreter
+  // ne vide ni ne verrouille jamais la liste.
 
   async function demarrer() {
     const { data, error } = await sb.from('tournees')
@@ -794,26 +805,21 @@ const NacellisteApp = (() => {
     recalculerEtas();
 
     if (!interventions.some((i) => i.statut !== 'faite')) {
-      message('Tous les clients sont faits 🎉 — vous pouvez terminer la tournée.', 'ok');
+      message('Tous les clients sont faits 🎉 — vous pouvez arrêter le partage GPS.', 'ok');
     }
   }
 
-  async function terminerTournee() {
-    const restantes = interventions.filter((i) => i.statut !== 'faite').length;
-    const avertissement = restantes
-      ? `Il reste ${restantes} intervention(s) non faite(s).\n`
-      : '';
-    if (!confirm(`${avertissement}Terminer la tournée ?\nLe suivi GPS s’arrête. Les liens des arrêts non faits restent valables.`)) return;
+  async function arreterPartage() {
+    if (!confirm('Arrêter le partage de position ?\nVotre liste d’interventions reste intacte — rien n’est effacé ni verrouillé.')) return;
 
     const { data, error } = await sb.from('tournees')
-      .update({ statut: 'terminee' }).eq('id', tournee.id).select().single();
+      .update({ statut: 'preparee' }).eq('id', tournee.id).select().single();
     if (error) { message(error.message, 'erreur'); return; }
     tournee = data;
 
     desactiverSuivi();
-    await chargerInterventions();
     rendre();
-    message('Tournée terminée. Suivi GPS arrêté — les liens des arrêts non faits restent actifs.', 'ok');
+    message('Partage GPS arrêté. Votre liste reste là — reprenez quand vous voulez.', 'ok');
   }
 
   // ---------- lien client ----------
@@ -838,7 +844,7 @@ const NacellisteApp = (() => {
     $('btn-optimiser').addEventListener('click', optimiser);
     $('btn-demarrer').addEventListener('click', demarrer);
     $('btn-pause').addEventListener('click', basculerPause);
-    $('btn-terminer-tournee').addEventListener('click', terminerTournee);
+    $('btn-terminer-tournee').addEventListener('click', arreterPartage);
   }
 
   return { init };
