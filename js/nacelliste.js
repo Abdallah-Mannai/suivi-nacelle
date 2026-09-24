@@ -3,8 +3,9 @@
 // sa LISTE CONTINUE d'interventions (une seule liste, sans date :
 // rien ne se vide au changement de jour), ajout d'interventions
 // (adresse BAN ou « lat;lng »), optimisation de l'itineraire
-// (OSRM), partage de position (« En tournee / Arreter »), boutons
-// « Termine » et « Copier le lien client ».
+// (OSRM), partage de position (modale d'explication AVANT la popup
+// GPS du navigateur + bandeau « tu es visible » tant que le partage
+// est actif), boutons « Termine » et « Copier le lien client ».
 // ============================================================
 
 const NacellisteApp = (() => {
@@ -34,6 +35,9 @@ const NacellisteApp = (() => {
   let enPause = false;
   let dernierEnvoi = 0;
   let dernierePosition = null;
+  let partageActif = false;          // au moins un fixe GPS recu : bandeau affiche
+  let dernierePositionRecue = 0;     // date du dernier fixe (« mise a jour il y a Xs »)
+  let timerBandeau = null;
   // Animation du camion (meme principe que la page client) :
   let geometrieCourante = null;      // dernier trace OSRM affiche
   let posAffichee = null;            // position (logique) du camion
@@ -84,7 +88,7 @@ const NacellisteApp = (() => {
     rendre();
 
     // Page rechargee en pleine tournee : on reprend le suivi.
-    if (tournee.statut === 'en_cours') activerSuivi();
+    if (tournee.statut === 'en_cours') reprendreSuivi();
   }
 
   // La liste continue : UNE tournee « permanente » par nacelliste.
@@ -295,12 +299,17 @@ const NacellisteApp = (() => {
     // liste, elle, ne se vide et ne se verrouille jamais.
     const enTournee = tournee.statut === 'en_cours';
     const badge = $('nac-statut');
-    badge.textContent = enTournee ? 'en tournée — GPS actif' : 'GPS arrêté';
+    badge.textContent = enTournee
+      ? (partageActif ? 'en tournée — position partagée' : 'en tournée — position non partagée')
+      : 'GPS arrêté';
     badge.className = `badge badge-${enTournee ? 'en_cours' : 'preparee'}`;
 
     $('btn-demarrer').classList.toggle('hidden', enTournee);
-    $('btn-pause').classList.toggle('hidden', !enTournee);
+    $('btn-pause').classList.toggle('hidden', !enTournee || !partageActif);
     $('btn-terminer-tournee').classList.toggle('hidden', !enTournee);
+    // « Réessayer le partage » : visible tant que la tournee tourne
+    // sans watchPosition actif (refus, « pas maintenant », vieux tel).
+    $('btn-reessayer-partage').classList.toggle('hidden', !enTournee || watchId !== null);
 
     const conteneur = $('liste-interventions');
     if (!interventions.length) {
@@ -683,32 +692,99 @@ const NacellisteApp = (() => {
   // (preparee = arrete, en_cours = en tournee) : demarrer ou arreter
   // ne vide ni ne verrouille jamais la liste.
 
-  async function demarrer() {
+  // Clic « En tournée » : on NE declenche PAS la popup GPS du
+  // navigateur tout de suite — d'abord une modale qui explique ce qui
+  // va se passer (sans elle, la demande systeme surgit de nulle part
+  // et beaucoup de nacellistes la refusent sans comprendre).
+  function demarrer() {
+    ouvrirModalePartage();
+  }
+
+  function ouvrirModalePartage() { $('modale-partage').classList.remove('hidden'); }
+  function fermerModalePartage() { $('modale-partage').classList.add('hidden'); }
+
+  // Passe la tournee « en cours » en base : les clients voient la
+  // progression (ordre des arrets), partage GPS ou pas.
+  async function passerEnTournee() {
     const { data, error } = await sb.from('tournees')
       .update({ statut: 'en_cours' }).eq('id', tournee.id).select().single();
-    if (error) { message(error.message, 'erreur'); return; }
+    if (error) { message(error.message, 'erreur'); return false; }
     tournee = data;
 
     // Menage de la trace GPS ancienne (>48 h) — meilleur moment :
     // personne n'attend cette requete.
     sb.rpc('nettoyer_positions').then(() => {}, () => {});
-
-    activerSuivi();
-    rendre();
+    return true;
   }
 
-  function activerSuivi() {
-    $('nac-suivi-actif').classList.remove('hidden');
+  // « Autoriser le partage » (bouton DE LA modale) : c'est CE clic qui
+  // appelle navigator.geolocation — la popup systeme arrive juste
+  // derriere, l'utilisateur sait a quoi il dit oui.
+  async function accepterPartage() {
+    fermerModalePartage();
+    if (tournee.statut !== 'en_cours' && !(await passerEnTournee())) return;
+    rendre();
+    activerSuivi();
+  }
 
+  // « Pas maintenant » : la tournee demarre quand meme, en mode
+  // progression, sans point live.
+  async function refuserPartage() {
+    fermerModalePartage();
+    const dejaEnTournee = tournee.statut === 'en_cours';
+    if (!dejaEnTournee && !(await passerEnTournee())) return;
+    rendre();
+    if (!dejaEnTournee) {
+      message('Tournée démarrée sans partage de position : les clients voient l’avancement des arrêts, mais pas le camion en direct. Appuyez sur « 📍 Réessayer le partage » quand vous voulez.', 'info');
+    }
+  }
+
+  // Etat de la permission « geolocation » (granted / prompt / denied),
+  // ou null si le navigateur ne sait pas repondre (vieux Safari).
+  async function etatPermission() {
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        return (await navigator.permissions.query({ name: 'geolocation' })).state;
+      }
+    } catch (_) { /* pas grave : on tentera directement */ }
+    return null;
+  }
+
+  // Page rechargee en pleine tournee : on reprend le partage SEULEMENT
+  // si la permission est deja accordee — pas de popup surprise au
+  // chargement, hors de tout contexte.
+  async function reprendreSuivi() {
+    const etat = await etatPermission();
+    if (etat === 'granted' || etat === null) { activerSuivi(); return; }
+    rendre();   // fait apparaitre « Réessayer le partage »
+    message('Tournée en cours, position non partagée — appuyez sur « 📍 Réessayer le partage » pour être visible de vos clients.', 'info');
+  }
+
+  async function activerSuivi() {
     if (!navigator.geolocation) {
-      message('GPS non disponible sur cet appareil — la tournée continue en mode progression, sans position live.', 'erreur');
+      message('Pas de GPS sur cet appareil — la tournée continue en mode progression : les clients voient l’avancement des arrêts, sans point live.', 'info');
+      rendre();
       return;
     }
-
     if (watchId !== null) return;
+
+    // La popup systeme va (peut-etre) apparaitre : on rappelle le
+    // geste attendu. Permission deja accordee : rien a dire.
+    if (await etatPermission() !== 'granted') {
+      message('👉 Appuie sur « Autoriser » dans la fenêtre qui s’affiche sur ton téléphone.', 'info');
+    }
+
     watchId = navigator.geolocation.watchPosition(
       async (p) => {
+        dernierePositionRecue = Date.now();
         dernierePosition = { lat: p.coords.latitude, lng: p.coords.longitude };
+        if (!partageActif) {
+          // Premier fixe recu : le partage marche, on l'affiche.
+          partageActif = true;
+          message('');
+          afficherBandeau();
+          rendre();
+        }
         rendreMaPosition();
         if (enPause || tournee.statut !== 'en_cours') return;
         const maintenant = Date.now();
@@ -723,7 +799,12 @@ const NacellisteApp = (() => {
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
-          message('Autorisation GPS refusée — la tournée continue en mode progression, sans position live. Les clients verront quand même l’avancement.', 'erreur');
+          // Refus / blocage : message pedagogique, pas d'erreur brute.
+          desactiverSuivi();   // stoppe le watch, cache le bandeau
+          rendre();            // fait apparaitre « Réessayer le partage »
+          message('Le partage est bloqué sur ce téléphone. Pour l’activer : appuie sur le 🔒 (ou l’icône à gauche de l’adresse du site), autorise la « Localisation », puis reviens ici et appuie sur « 📍 Réessayer le partage ». En attendant, la tournée continue en mode progression.', 'erreur');
+        } else if (!partageActif) {
+          message('Position introuvable pour l’instant (pas de signal GPS ?) — on continue d’essayer. La tournée avance quand même en mode progression.', 'info');
         } else {
           message('Signal GPS perdu — nouvelle tentative automatique…', 'info');
         }
@@ -734,20 +815,51 @@ const NacellisteApp = (() => {
     if (!timerEta) timerEta = setInterval(recalculerEtas, RECALCUL_ETA_MS);
     // Premier calcul rapide des que la position arrive.
     setTimeout(recalculerEtas, 8000);
+    rendre();   // cache « Réessayer » pendant que la demande est en cours
   }
 
   function desactiverSuivi() {
     if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
     if (timerEta) { clearInterval(timerEta); timerEta = null; }
-    $('nac-suivi-actif').classList.add('hidden');
+    partageActif = false;
+    dernierePositionRecue = 0;
+    enPause = false;
+    $('btn-pause').textContent = '⏸️ Pause GPS';
+    cacherBandeau();
+  }
+
+  // ---------- bandeau « tu es visible » ----------
+
+  function afficherBandeau() {
+    $('bandeau-titre').textContent = '🟢 En tournée — tu es visible par tes clients';
+    $('bandeau-visible').classList.remove('hidden');
+    document.body.classList.add('bandeau-actif');   // marge pour ne rien cacher
+    if (!timerBandeau) timerBandeau = setInterval(majBandeau, 5000);
+    majBandeau();
+  }
+
+  function cacherBandeau() {
+    $('bandeau-visible').classList.add('hidden');
+    document.body.classList.remove('bandeau-actif');
+    if (timerBandeau) { clearInterval(timerBandeau); timerBandeau = null; }
+  }
+
+  // « Position mise a jour il y a Xs » : rassure que ca marche.
+  function majBandeau() {
+    const el = $('bandeau-maj');
+    if (enPause) { el.textContent = 'partage en pause — plus rien n’est envoyé'; return; }
+    if (!dernierePositionRecue) { el.textContent = 'en attente du premier point GPS…'; return; }
+    const s = Math.round((Date.now() - dernierePositionRecue) / 1000);
+    el.textContent = s < 10 ? 'position à jour ✓' : `position mise à jour il y a ${s} s`;
   }
 
   function basculerPause() {
     enPause = !enPause;
     $('btn-pause').textContent = enPause ? '▶️ Reprendre GPS' : '⏸️ Pause GPS';
-    $('nac-suivi-actif').innerHTML = enPause
-      ? '⏸️ Suivi de position en pause'
-      : '<span class="point-vert"></span> Suivi de position activé';
+    $('bandeau-titre').textContent = enPause
+      ? '⏸️ Partage en pause — tes clients ne te voient plus bouger'
+      : '🟢 En tournée — tu es visible par tes clients';
+    majBandeau();
   }
 
   // « Je commence » : cet arret passe en_cours. Un SEUL arret en
@@ -845,6 +957,14 @@ const NacellisteApp = (() => {
     $('btn-demarrer').addEventListener('click', demarrer);
     $('btn-pause').addEventListener('click', basculerPause);
     $('btn-terminer-tournee').addEventListener('click', arreterPartage);
+    $('btn-reessayer-partage').addEventListener('click', ouvrirModalePartage);
+    $('btn-modale-autoriser').addEventListener('click', accepterPartage);
+    $('btn-modale-plus-tard').addEventListener('click', refuserPartage);
+    $('btn-bandeau-arreter').addEventListener('click', arreterPartage);
+    // Toucher le fond sombre = fermer la modale sans rien changer.
+    $('modale-partage').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) fermerModalePartage();
+    });
   }
 
   return { init };

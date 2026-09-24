@@ -231,6 +231,95 @@ details.carte-bloc[open] summary { margin-bottom: 10px; }
   margin-bottom: 12px;
 }
 
+/* ---------- modale « Partager ta position » ---------- */
+/* Affichee AVANT la demande GPS du navigateur, pour expliquer la
+   popup systeme qui va suivre. */
+
+.voile {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 39, 64, .58);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modale {
+  background: var(--carte);
+  border-radius: 18px;
+  padding: 22px 20px;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
+}
+
+.modale-emoji { font-size: 44px; }
+.modale-titre { margin: 6px 0 8px; font-size: 20px; color: var(--bleu); }
+.modale-texte { font-size: 14.5px; margin: 0 0 14px; }
+
+/* Petite maquette de la popup systeme, pour que le nacelliste la
+   reconnaisse quand elle apparait. */
+.faux-popup {
+  border: 1.5px solid var(--bord);
+  border-radius: 12px;
+  background: var(--fond);
+  padding: 10px 12px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.faux-popup-boutons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 8px;
+  font-weight: 700;
+  color: var(--texte-doux);
+}
+.faux-popup-ok { color: var(--vert); }
+
+.modale-consigne { font-size: 13px; color: var(--texte-doux); margin: 8px 0 16px; }
+
+.modale .btn-lien { margin-top: 8px; color: var(--texte-doux); }
+
+/* ---------- bandeau « tu es visible » (partage actif) ---------- */
+
+.bandeau-visible {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1500;
+  background: var(--vert);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, .25);
+}
+
+.bandeau-textes { min-width: 0; }
+.bandeau-titre { font-weight: 800; font-size: 14px; line-height: 1.3; }
+.bandeau-sous { font-size: 12px; opacity: .92; }
+
+.bandeau-visible .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, .55);
+}
+
+/* Le bandeau ne doit rien cacher en bas de page. */
+body.bandeau-actif .conteneur {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
 /* ---------- carte Leaflet ---------- */
 
 .carte-leaflet {

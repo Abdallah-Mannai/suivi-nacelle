@@ -7,7 +7,7 @@
   <title>Suivi Nacelle</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body>
 
@@ -30,9 +30,6 @@
       <div>
         <div class="tournee-date" id="nac-date">Mes interventions</div>
         <div class="badge" id="nac-statut">GPS arrêté</div>
-      </div>
-      <div id="nac-suivi-actif" class="suivi-actif hidden">
-        <span class="point-vert"></span> Suivi de position activé
       </div>
     </div>
 
@@ -72,6 +69,7 @@
       <button id="btn-demarrer"  class="btn btn-primary">▶️ En tournée (partager ma position)</button>
       <button id="btn-pause"     class="btn btn-secondaire hidden">⏸️ Pause GPS</button>
       <button id="btn-terminer-tournee" class="btn btn-secondaire hidden">⏹️ Arrêter le partage GPS</button>
+      <button id="btn-reessayer-partage" class="btn btn-primary hidden">📍 Réessayer le partage</button>
     </div>
 
     <div id="carte-nacelliste" class="carte-leaflet"></div>
@@ -162,13 +160,44 @@
     </section>
   </main>
 
+  <!-- Modale pedagogique AVANT la demande GPS du navigateur : c'est
+       le bouton « Autoriser le partage » qui declenche la popup
+       systeme, pas le clic « En tournée » — l'utilisateur sait a
+       quoi il dit oui. -->
+  <div id="modale-partage" class="voile hidden">
+    <div class="modale">
+      <div class="modale-emoji">📍</div>
+      <h2 class="modale-titre">Partager ta position</h2>
+      <p class="modale-texte">
+        Pour que tes clients voient où tu es et quand tu arrives, ton téléphone
+        va te demander d’autoriser l’accès à ta position.
+      </p>
+      <div class="faux-popup">
+        <div>Autoriser <b>Suivi Nacelle</b> à accéder à la position de cet appareil&nbsp;?</div>
+        <div class="faux-popup-boutons"><span>Bloquer</span><span class="faux-popup-ok">Autoriser ✅</span></div>
+      </div>
+      <p class="modale-consigne">⬆️ Quand cette fenêtre apparaît sur ton téléphone, appuie sur <b>« Autoriser »</b>.</p>
+      <button id="btn-modale-autoriser" class="btn btn-primary btn-bloc">✅ Autoriser le partage</button>
+      <button id="btn-modale-plus-tard" class="btn btn-lien btn-bloc">Pas maintenant</button>
+    </div>
+  </div>
+
+  <!-- Bandeau persistant tant que le partage de position est actif -->
+  <div id="bandeau-visible" class="bandeau-visible hidden">
+    <div class="bandeau-textes">
+      <div class="bandeau-titre" id="bandeau-titre">🟢 En tournée — tu es visible par tes clients</div>
+      <div class="bandeau-sous" id="bandeau-maj"></div>
+    </div>
+    <button id="btn-bandeau-arreter" class="btn btn-petit">⏹️ Arrêter le partage</button>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="js/supabase-config.js?v=1"></script>
   <script src="js/geo.js?v=1"></script>
   <script src="js/itineraire.js?v=1"></script>
-  <script src="js/nacelliste.js?v=6"></script>
+  <script src="js/nacelliste.js?v=7"></script>
   <script src="js/admin.js?v=5"></script>
   <script src="js/app.js?v=1"></script>
 </body>
